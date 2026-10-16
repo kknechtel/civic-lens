@@ -1,0 +1,942 @@
+[
+  {
+    "name": "On the Deck",
+    "category": "restaurant",
+    "subcategory": "Seafood",
+    "address": "10 Simon Lake Dr, Atlantic Highlands, NJ",
+    "rating": 4.5,
+    "total_reviews": 1852,
+    "price_range": "$20-30",
+    "hours_note": "Open \u00c2\u00b7 Closes 11 PM",
+    "description": "American grub & a waterfront setting",
+    "instagram": "otdrestaurant",
+    "social": {
+      "instagram": "otdrestaurant",
+      "followers": 5520
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "features": [
+      "Waterfront Dining",
+      "Outdoor Seating",
+      "Live Music (seasonal)"
+    ],
+    "facebook": "https://www.facebook.com/OnTheDeckNJ/"
+  },
+  {
+    "name": "The Atlantic House",
+    "category": "restaurant",
+    "subcategory": "Seafood",
+    "address": "67 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.5,
+    "total_reviews": 278,
+    "price_range": "$20-30",
+    "hours_note": "Open \u00c2\u00b7 Closes 11 PM",
+    "features": [
+      "European Cuisine",
+      "Craft Cocktails",
+      "Small Plates"
+    ],
+    "instagram": "theatlantichousenj",
+    "social": {
+      "instagram": "theatlantichousenj"
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Christine's",
+    "category": "restaurant",
+    "subcategory": "Fine Dining",
+    "address": "42 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.7,
+    "total_reviews": 382,
+    "price_range": "$50-100",
+    "hours_note": "Open \u00c2\u00b7 Closes 11 PM",
+    "description": "Romantic, white-tablecloth restaurant",
+    "features": [
+      "Italian",
+      "Fine Dining",
+      "Wine Bar"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "facebook": "https://www.facebook.com/christinesrestaurant/"
+  },
+  {
+    "name": "Saltwater Bar and Kitchen by Big Mike",
+    "category": "restaurant",
+    "subcategory": "Restaurant",
+    "address": "128 Bay Ave, Atlantic Highlands, NJ",
+    "rating": 4.8,
+    "total_reviews": 150,
+    "price_range": "$40-50",
+    "hours_note": "Open \u00c2\u00b7 Closes 11 PM",
+    "features": [
+      "Seafood",
+      "Bar",
+      "Waterfront"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Harborside Grill",
+    "category": "restaurant",
+    "subcategory": "Grill",
+    "address": "40 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.2,
+    "total_reviews": 518,
+    "price_range": "$20-30",
+    "hours_note": "Open \u00c2\u00b7 Closes 2 AM",
+    "description": "Seafood plus American & Italian classics",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "features": [
+      "American",
+      "Seafood",
+      "Harbor Views"
+    ],
+    "facebook": "https://www.facebook.com/HarborsideGrillNJ/"
+  },
+  {
+    "name": "STRADA",
+    "category": "restaurant",
+    "subcategory": "Italian",
+    "address": "91 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.5,
+    "total_reviews": 190,
+    "price_range": "$50-100",
+    "hours_note": "Closes 10 PM \u00c2\u00b7 Opens 4 PM Tue",
+    "features": [
+      "Wood-Fired Pizza",
+      "Italian",
+      "BYOB"
+    ],
+    "instagram": "stradapizzabar",
+    "social": {
+      "instagram": "stradapizzabar",
+      "followers": 7996
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "facebook": "https://www.facebook.com/stradapizzabar/"
+  },
+  {
+    "name": "Emilio's Kitchen",
+    "category": "restaurant",
+    "subcategory": "Organic",
+    "address": "77 Center Ave, Atlantic Highlands, NJ",
+    "rating": 4.9,
+    "total_reviews": 721,
+    "price_range": "$20-30",
+    "hours_note": "Opens 7 AM Sun",
+    "features": [
+      "Organic Mexican",
+      "Puebla-Inspired",
+      "BYOB"
+    ],
+    "instagram": "emilioskitchennj",
+    "social": {
+      "instagram": "emilioskitchennj"
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "website": "https://www.emilioskitchen.com",
+    "menu_url": "https://www.emilioskitchen.com/menu"
+  },
+  {
+    "name": "Gaslight",
+    "category": "bar",
+    "subcategory": "Gastropub",
+    "address": "33 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.3,
+    "total_reviews": 279,
+    "price_range": "$20-30",
+    "hours_note": "Open \u00c2\u00b7 Closes 12 AM",
+    "description": "Gastropub with craft beers and live music",
+    "instagram": "gaslight.ah",
+    "email": "craftbeer@gaslightah.com",
+    "linktree": "https://linktr.ee/gaslight33",
+    "event_tickets": "https://posh.vip/g/gaslight",
+    "social": {
+      "instagram": "gaslight.ah",
+      "linktree": "https://linktr.ee/gaslight33"
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "features": [
+      "Live Music",
+      "Craft Beer",
+      "Bar"
+    ],
+    "music_schedule": "Monthly live music calendar - check Instagram @gaslight.ah",
+    "facebook": "https://www.facebook.com/p/Gaslight-Gastropub-100067374374903/"
+  },
+  {
+    "name": "The Wine Bar and Restaurant",
+    "category": "bar",
+    "subcategory": "Wine bar",
+    "address": "40 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.3,
+    "total_reviews": 118,
+    "price_range": "$20-30",
+    "phone": "(732) 291-1377",
+    "hours_note": "Open \u00c2\u00b7 Closes 12 AM",
+    "description": "Classy lounge with an eclectic menu",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "features": [
+      "Wine Bar",
+      "Tapas",
+      "Date Night"
+    ],
+    "facebook": "https://www.facebook.com/TheWineBarNJ/"
+  },
+  {
+    "name": "Gateway Bar & Liquors",
+    "category": "bar",
+    "subcategory": "Bar & Karaoke",
+    "address": "1018 NJ-36, Atlantic Highlands, NJ",
+    "rating": 4.6,
+    "total_reviews": 118,
+    "price_range": "$10-20",
+    "hours_note": "Open \u00c2\u00b7 Closes 11 PM",
+    "features": [
+      "Karaoke Every Saturday",
+      "Bar",
+      "Liquor Store",
+      "Food Menu"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "music_schedule": "Karaoke every Saturday night",
+    "facebook": "https://www.facebook.com/gatewayliquors/"
+  },
+  {
+    "name": "THE BAR",
+    "category": "bar",
+    "subcategory": "Bar / Liquor store",
+    "address": "160 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.9,
+    "total_reviews": 34,
+    "price_range": "$",
+    "phone": "(732) 202-5490",
+    "hours_note": "Open \u00c2\u00b7 Closes 2 AM",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "website": "https://www.thebarnj.com"
+  },
+  {
+    "name": "Hudson Cafe",
+    "category": "cafe",
+    "subcategory": "Cafe",
+    "address": "25 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.8,
+    "total_reviews": 251,
+    "price_range": "$10-20",
+    "hours_note": "Opens 8 AM Sun",
+    "features": [
+      "Breakfast",
+      "Lunch",
+      "Coffee"
+    ],
+    "instagram": "hudsoncafenj",
+    "social": {
+      "instagram": "hudsoncafenj",
+      "followers": 4082
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "facebook": "https://www.facebook.com/hudsoncafenj/"
+  },
+  {
+    "name": "Cozy Corner Bakery",
+    "category": "cafe",
+    "subcategory": "Bakery",
+    "address": "1 West Ave, Atlantic Highlands, NJ",
+    "rating": 5.0,
+    "total_reviews": 39,
+    "price_range": "$1-10",
+    "hours_note": "Opens 8 AM Sun",
+    "instagram": "cozy_corner_bakery",
+    "social": {
+      "instagram": "cozy_corner_bakery",
+      "followers": 5774
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "features": [
+      "Pastries",
+      "Custom Cakes",
+      "Coffee"
+    ],
+    "website": "https://www.cozycornerbakery.com"
+  },
+  {
+    "name": "1st Cup Coffee",
+    "category": "cafe",
+    "subcategory": "Coffee shop",
+    "address": "96 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.7,
+    "total_reviews": 190,
+    "price_range": "$1-10",
+    "hours_note": "Opens 6 AM Sun",
+    "features": [
+      "Coffee",
+      "Espresso",
+      "First Ave Location"
+    ],
+    "instagram": "1stcupcoffee",
+    "social": {
+      "instagram": "1stcupcoffee"
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Fair Mountain Coffee Roasters",
+    "category": "cafe",
+    "subcategory": "Coffee roastery",
+    "address": "171 1st Avenue, W Garfield Ave, Atlantic Highlands, NJ",
+    "rating": 5.0,
+    "total_reviews": 148,
+    "hours_note": "Opens 8 AM Sun",
+    "description": "They roast their own coffee, serve with choice of milks including vegan",
+    "instagram": "fairmountain",
+    "social": {
+      "instagram": "fairmountain",
+      "followers": 3489
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "features": [
+      "USDA Organic",
+      "Fair Trade",
+      "Coffee Roasting"
+    ],
+    "website": "https://www.fairmountaincoffee.com"
+  },
+  {
+    "name": "Almost Home Red General",
+    "category": "cafe",
+    "subcategory": "Restaurant / Cafe",
+    "address": "101 Navesink Ave, Atlantic Highlands, NJ",
+    "rating": 4.6,
+    "total_reviews": 123,
+    "price_range": "$10-20",
+    "hours_note": "Opens 7 AM Sun",
+    "features": [
+      "Order online"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Highlands Cafe",
+    "category": "cafe",
+    "subcategory": "Restaurant / Cafe",
+    "address": "300 Bay Ave, Atlantic Highlands, NJ",
+    "rating": 4.8,
+    "total_reviews": 37,
+    "price_range": "$10-20",
+    "hours_note": "Opens 7 AM Sun",
+    "features": [
+      "Order online"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "The Bagel Nook",
+    "category": "cafe",
+    "subcategory": "Bagel shop",
+    "address": "2345 NJ-36, Atlantic Highlands, NJ",
+    "rating": 4.8,
+    "total_reviews": 138,
+    "price_range": "$1-10",
+    "hours_note": "Opens 7 AM Sun",
+    "features": [
+      "Order online"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "website": "https://www.thebagelnook.com"
+  },
+  {
+    "name": "Julio's Pizza Co.",
+    "category": "restaurant",
+    "subcategory": "Pizza",
+    "address": "75 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.8,
+    "total_reviews": 260,
+    "price_range": "$10-20",
+    "hours_note": "Opens 11:30 AM Sun",
+    "features": [
+      "Pizza",
+      "The Famous Pickle Pie"
+    ],
+    "instagram": "heyitsjulios",
+    "social": {
+      "instagram": "heyitsjulios"
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Chiafullo's Navesink Pizza",
+    "category": "restaurant",
+    "subcategory": "Pizza",
+    "address": "1010 NJ-36, Atlantic Highlands, NJ",
+    "rating": 4.5,
+    "total_reviews": 357,
+    "price_range": "$10-20",
+    "hours_note": "Opens 11 AM Sun",
+    "features": [
+      "Order online"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Pomodoro Rosso Italian Grill & Pizzeria",
+    "category": "restaurant",
+    "subcategory": "Italian / Pizza",
+    "address": "5 Bayshore Plaza, Atlantic Highlands, NJ",
+    "rating": 3.9,
+    "total_reviews": 207,
+    "price_range": "$10-20",
+    "hours_note": "Opens 11 AM Sun",
+    "features": [
+      "Order online",
+      "Check wait time"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Franny's Pizzeria & Restaurant",
+    "category": "restaurant",
+    "subcategory": "Pizza",
+    "address": "279 Bay Ave, Atlantic Highlands, NJ",
+    "rating": 4.6,
+    "total_reviews": 447,
+    "price_range": "$10-20",
+    "hours_note": "Opens 11 AM Sun",
+    "description": "Unfussy pizzeria for pies & pasta",
+    "features": [
+      "Order online"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Mike's Dairy & Deli",
+    "category": "restaurant",
+    "subcategory": "Deli",
+    "address": "160 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.5,
+    "total_reviews": 66,
+    "price_range": "$10-20",
+    "hours_note": "Opens 5 AM Sun",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Domino's Pizza",
+    "category": "restaurant",
+    "subcategory": "Pizza Delivery",
+    "address": "183 First Ave, Atlantic Highlands, NJ",
+    "rating": 3.5,
+    "total_reviews": 200,
+    "price_range": "$10-20",
+    "hours_note": "Open \u00c2\u00b7 Closes 1 AM",
+    "description": "Longtime pizza chain known for delivery",
+    "features": [
+      "Order online"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Renaissance Emporium",
+    "category": "shop",
+    "subcategory": "Antique store",
+    "address": "81 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.4,
+    "total_reviews": 23,
+    "phone": "(732) 291-9101",
+    "hours_note": "Opens 11 AM Sun",
+    "social": {
+      "facebook": "facebook.com/Renaissance-Emporium"
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Bungalow Road",
+    "category": "shop",
+    "subcategory": "Home goods / Clothing",
+    "address": "60 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.4,
+    "total_reviews": 11,
+    "phone": "(732) 291-2541",
+    "hours_note": "Opens 10 AM Sun",
+    "instagram": "bungalow_road",
+    "social": {
+      "instagram": "bungalow_road"
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "St. Agnes Thrift Shop",
+    "category": "shop",
+    "subcategory": "Thrift store",
+    "address": "Ave D & South Ave, Atlantic Highlands, NJ",
+    "rating": 4.5,
+    "total_reviews": 34,
+    "phone": "(732) 291-2156",
+    "hours_note": "Opens 10 AM Wed",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Junction Boutique Gift Shop",
+    "category": "shop",
+    "subcategory": "Gift shop",
+    "address": "980 NJ-36, Atlantic Highlands, NJ",
+    "rating": 5.0,
+    "total_reviews": 14,
+    "phone": "(732) 884-8918",
+    "hours_note": "Opens 10 AM Mon",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Little Chicken",
+    "category": "shop",
+    "subcategory": "Clothing store",
+    "address": "35 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.4,
+    "total_reviews": 53,
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Bayshore Shopping Plaza",
+    "category": "shop",
+    "subcategory": "Shopping mall",
+    "address": "Bayshore Plaza, Atlantic Highlands, NJ",
+    "rating": 4.4,
+    "total_reviews": 111,
+    "phone": "(732) 291-3261",
+    "hours_note": "Open 24 hours",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Atlantic Highlands Mini Mall",
+    "category": "shop",
+    "subcategory": "Shopping mall",
+    "address": "68 First Ave, Atlantic Highlands, NJ",
+    "rating": 3.3,
+    "total_reviews": 3,
+    "phone": "(732) 872-8711",
+    "hours_note": "Opens 10 AM Tue",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Atlantic Highlands Wellness Center",
+    "category": "service",
+    "subcategory": "Health spa",
+    "address": "84 First Ave Suite B, Atlantic Highlands, NJ",
+    "rating": 5.0,
+    "total_reviews": 3,
+    "hours_note": "Opens 10 AM Tue",
+    "features": [
+      "Onsite services"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Evolution The Salon",
+    "category": "service",
+    "subcategory": "Hair salon",
+    "address": "17 First Ave, Atlantic Highlands, NJ",
+    "rating": 5.0,
+    "total_reviews": 103,
+    "hours_note": "Opens 8:30 AM Sun",
+    "features": [
+      "Book online"
+    ],
+    "instagram": "evolutionthesalonnj",
+    "social": {
+      "instagram": [
+        "evolutionbythebay",
+        "evolutionthesalonnj"
+      ]
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Skin Love Beauty & Body Bar",
+    "category": "service",
+    "subcategory": "Spa",
+    "address": "20 West Ave, Atlantic Highlands, NJ",
+    "rating": 5.0,
+    "total_reviews": 62,
+    "hours_note": "Opens 12 PM Sun",
+    "features": [
+      "Book online"
+    ],
+    "social": {
+      "facebook": "facebook.com/Skin-Love-Beauty"
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Salon at 68",
+    "category": "service",
+    "subcategory": "Beauty salon",
+    "address": "68 First Ave Suite B, Atlantic Highlands, NJ",
+    "rating": 4.9,
+    "total_reviews": 24,
+    "hours_note": "Opens 9:30 AM Tue",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Pure Luxe Aesthetics Medical Spa",
+    "category": "service",
+    "subcategory": "Medical spa",
+    "address": "171 First Ave, Atlantic Highlands, NJ",
+    "rating": 5.0,
+    "total_reviews": 367,
+    "hours_note": "Opens 9:30 AM Mon",
+    "features": [
+      "Book online"
+    ],
+    "social": {
+      "facebook": "facebook.com/pureluxeaestheticslounge"
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Varno Fitness",
+    "category": "service",
+    "subcategory": "Fitness center",
+    "address": "21 W Lincoln Ave, Atlantic Highlands, NJ",
+    "rating": 5.0,
+    "total_reviews": 112,
+    "hours_note": "Opens 8 AM Sun",
+    "instagram": "varno_fitness_",
+    "social": {
+      "instagram": "varno_fitness_",
+      "followers": 1258
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Royal Atlantic Wines & Spirits",
+    "category": "shop",
+    "subcategory": "Liquor store",
+    "address": "179 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.7,
+    "total_reviews": 105,
+    "phone": "(732) 291-0283",
+    "hours_note": "Opens 9 AM Sun",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Saltwater Liquors",
+    "category": "shop",
+    "subcategory": "Beer / Liquor store",
+    "address": "9 Bayshore Plaza, Atlantic Highlands, NJ",
+    "rating": 4.8,
+    "total_reviews": 66,
+    "phone": "(732) 291-0870",
+    "hours_note": "Opens 9 AM Sun",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "First Ave Florist",
+    "category": "shop",
+    "subcategory": "Florist",
+    "address": "72 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.3,
+    "total_reviews": 17,
+    "phone": "(732) 291-8300",
+    "hours_note": "Opens 9 AM Mon",
+    "features": [
+      "Delivery"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "In The Garden",
+    "category": "shop",
+    "subcategory": "Florist",
+    "address": "69 Waterwitch Ave, Atlantic Highlands, NJ",
+    "rating": 4.9,
+    "total_reviews": 64,
+    "phone": "(732) 291-0311",
+    "hours_note": "Opens 10 AM Sun",
+    "features": [
+      "In-store shopping",
+      "Delivery"
+    ],
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Atlantic Highlands Arts Council",
+    "category": "attraction",
+    "subcategory": "Art gallery / Non-profit",
+    "address": "54 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.7,
+    "total_reviews": 23,
+    "phone": "(732) 291-1260",
+    "hours_note": "Opens 11 AM Sun",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Smodcastle Cinemas",
+    "category": "attraction",
+    "subcategory": "Movie theater",
+    "address": "82 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.7,
+    "total_reviews": 374,
+    "phone": "(732) 204-2454",
+    "hours_note": "Check website",
+    "description": "Vintage film house with digital tech (Kevin Smith's theater)",
+    "instagram": "smodcastlecinemas",
+    "social": {
+      "instagram": "smodcastlecinemas",
+      "followers": 19000
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28",
+    "website": "https://www.smodcastlecinemas.com",
+    "features": [
+      "Kevin Smith's Theater",
+      "Special Screenings",
+      "Film Events",
+      "Live Q&As"
+    ]
+  },
+  {
+    "name": "First Avenue Playhouse Dessert Theatre",
+    "category": "attraction",
+    "subcategory": "Performing arts theater",
+    "address": "123 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.7,
+    "total_reviews": 92,
+    "phone": "(732) 291-7552",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Seastreak Ferry - Atlantic Highlands",
+    "category": "attraction",
+    "subcategory": "Ferry terminal",
+    "address": "2 First Ave, Atlantic Highlands, NJ",
+    "rating": 4.3,
+    "total_reviews": 119,
+    "phone": "(800) 262-8743",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Classic Boat Rides",
+    "category": "attraction",
+    "subcategory": "Boat tour agency",
+    "address": "8 Simon Lake Dr, Atlantic Highlands, NJ",
+    "rating": 4.9,
+    "total_reviews": 97,
+    "phone": "(732) 337-9292",
+    "social": {
+      "facebook": "facebook.com/cbrmariner"
+    },
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Mount Mitchill Scenic Overlook",
+    "category": "attraction",
+    "subcategory": "Park",
+    "address": "460 Ocean Blvd, Atlantic Highlands, NJ",
+    "rating": 4.8,
+    "total_reviews": 972,
+    "phone": "(732) 872-0336",
+    "description": "Highest natural feature along the entire East Coast",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Strauss Mansion Museum",
+    "category": "attraction",
+    "subcategory": "Museum",
+    "address": "27 Prospect Cir, Atlantic Highlands, NJ",
+    "rating": 4.6,
+    "total_reviews": 71,
+    "phone": "(732) 291-1861",
+    "hours_note": "Opens 12 PM Sun",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Lenape Woods Nature Preserve",
+    "category": "attraction",
+    "subcategory": "Nature preserve / Hiking",
+    "address": "259 E Highland Ave, Atlantic Highlands, NJ",
+    "rating": 4.6,
+    "total_reviews": 39,
+    "hours_note": "Open 24 hours",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Jungle Jim & Jane",
+    "category": "attraction",
+    "subcategory": "Indoor playground",
+    "address": "2399 NJ-36, Atlantic Highlands, NJ",
+    "rating": 4.9,
+    "total_reviews": 462,
+    "phone": "(732) 872-4380",
+    "hours_note": "Opens 9:30 AM Sun",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Heirloom Light Photography",
+    "category": "service",
+    "subcategory": "Photography",
+    "address": "Atlantic Highlands, NJ",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "KidzArt Monmouth",
+    "category": "service",
+    "subcategory": "Art school",
+    "address": "Atlantic Highlands, NJ",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Butler Landscaping & Nursery",
+    "category": "service",
+    "subcategory": "Landscaping",
+    "address": "Atlantic Highlands, NJ",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Navasink Fishery",
+    "category": "shop",
+    "subcategory": "Seafood market / Restaurant",
+    "address": "Atlantic Highlands, NJ",
+    "description": "Local seafood in a market/restaurant",
+    "source": "google_maps",
+    "scraped_at": "2026-03-28"
+  },
+  {
+    "name": "Carton Brewing",
+    "category": "bar",
+    "subcategory": "Brewery",
+    "address": "6 E Washington Ave, Atlantic Highlands, NJ",
+    "rating": 4.6,
+    "total_reviews": 2100,
+    "price_range": "$10-20",
+    "hours_note": "Taproom hours vary",
+    "description": "Award-winning craft brewery with taproom. Known for Boat Beer and creative brews.",
+    "instagram": "cartonbrewing",
+    "social": {
+      "instagram": "cartonbrewing",
+      "followers": 32000
+    },
+    "phone": "(732) 654-2337",
+    "website": "https://cartonbrewing.com",
+    "features": [
+      "Craft Brewery",
+      "Taproom",
+      "Beer Garden",
+      "Food Trucks"
+    ],
+    "menu_url": "https://www.cartonbrewing.com/beer",
+    "source": "manual"
+  },
+  {
+    "name": "Highlander Bicycle Company",
+    "category": "shop",
+    "subcategory": "Bike Shop",
+    "address": "28 First Avenue, Atlantic Highlands, NJ 07716",
+    "rating": 4.8,
+    "total_reviews": 85,
+    "price_range": "Varies",
+    "hours_note": "Tue-Sat 10am-6pm, Sun 11am-4pm",
+    "description": "Independent bike shop \u2014 road, mountain, commuter, electric bikes. Professional service & repair. Kids bike trade-up program.",
+    "instagram": "highlanderbicycleco",
+    "social": {
+      "instagram": "highlanderbicycleco"
+    },
+    "phone": "(732) 413-4022",
+    "website": "https://www.highlandernj.com",
+    "features": [
+      "Bike Sales",
+      "Repairs & Service",
+      "E-Bikes",
+      "Kids Bikes",
+      "Henry Hudson Trail Access"
+    ],
+    "source": "manual"
+  },
+  {
+    "name": "Kranky Cycles",
+    "category": "attraction",
+    "subcategory": "Bike Rentals",
+    "address": "321 Bay Ave, Highlands, NJ",
+    "rating": 4.7,
+    "total_reviews": 120,
+    "price_range": "$25-30",
+    "hours_note": "Seasonal hours",
+    "description": "Family-owned bike rental shop. Cruiser bikes $25/day, e-bikes $30/2hrs. Perfect for Henry Hudson Trail rides.",
+    "phone": "(732) 291-1166",
+    "features": [
+      "Bike Rentals",
+      "E-Bike Rentals",
+      "Henry Hudson Trail",
+      "Family-Owned"
+    ],
+    "source": "manual"
+  },
+  {
+    "name": "First Avenue Playhouse",
+    "category": "attraction",
+    "subcategory": "Dessert Theatre",
+    "address": "123 First Avenue, Atlantic Highlands, NJ 07716",
+    "rating": 4.7,
+    "total_reviews": 95,
+    "description": "Community theater with dessert service. Gourmet cake, coffee/tea at intermission. Current show: Old Love (March 2026).",
+    "phone": "(732) 291-7552",
+    "website": "https://firstaveplayhouse.com",
+    "features": [
+      "Live Theater",
+      "Dessert Included",
+      "Community Productions",
+      "Comedy Nights"
+    ],
+    "source": "manual"
+  }
+]

@@ -1,0 +1,20 @@
+[Unit]
+Description=Civic Lens daily alert digest
+After=network-online.target civic-api.service civic-scraper.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/civic-lens/api
+# Inherit ah-api's env (DATABASE_URL, AWS creds, DIGEST_FROM_EMAIL,
+# DIGEST_REPLY_TO, PUBLIC_WEB_ORIGIN). DIGEST_FROM_EMAIL must be a verified
+# SES identity (domain or address) or sends are silently dropped.
+EnvironmentFile=-/etc/civic-lens.env
+
+ExecStart=/opt/civic-lens/api/venv/bin/python -m scripts.run_digest
+
+# Don't crash the timer if a single user's digest errors; the worker
+# already isolates per-alert failures.
+SuccessExitStatus=0 1
+StandardOutput=journal
+StandardError=journal

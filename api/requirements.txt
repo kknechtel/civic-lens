@@ -1,0 +1,75 @@
+# Web framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+gunicorn==22.0.0
+python-multipart==0.0.27
+
+# Database
+sqlalchemy==2.0.32
+psycopg2-binary==2.9.9
+alembic==1.13.2
+
+# AWS
+boto3==1.35.0
+
+# Auth
+python-jose[cryptography]==3.4.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.0
+google-auth==2.32.0  # Google ID token verification for /api/auth/google
+
+# AI/LLM
+anthropic>=0.40.0
+google-genai==1.0.0
+duckduckgo-search>=6.2.0
+openai>=1.40.0  # Whisper API fallback for meeting-recording transcription
+
+# Meeting-recording transcription
+# faster-whisper bundles PyAV which decodes .wma/.wav/.m4a natively (no ffmpeg required for these).
+# YouTube transcripts: youtube-transcript-api is the fast path (captions); falls back
+# to yt-dlp audio download + faster-whisper when YouTube blocks the IP (e.g. on EC2).
+faster-whisper>=1.0.0
+youtube-transcript-api>=1.0.0
+yt-dlp>=2024.1.0
+
+# RAG
+numpy>=1.26.0
+pgvector>=0.3.0
+
+# PDF Processing
+pymupdf==1.24.10
+pymupdf4llm==0.0.17
+pdfplumber>=0.11.0
+pdf2image>=1.17.0
+Pillow>=10.0.0
+pytesseract>=0.3.10  # Tier 2 of the OCR cascade — needs the `tesseract` system binary
+reportlab>=4.2.0  # OPRA request PDF generation (mirrors NJ DCA model form)
+
+# Office document export (presentations)
+python-docx>=1.1.0
+python-pptx>=1.0.0
+
+# Data
+pandas==2.2.2
+openpyxl==3.1.5
+xlsxwriter==3.2.0
+pydantic==2.9.1
+
+# Scraper
+requests==2.33.0
+beautifulsoup4==4.12.3
+# Playwright is used by api/services/event_scrapers/playwright_adapter.py
+# to render JS-heavy venue calendars (Chubby Pickle's JetEngine widget,
+# Donovan's Reef BeatGig embed). After installing the wheel you ALSO
+# have to download the browser binary on the host:
+#     /opt/atlantic-highlands/api/venv/bin/playwright install --with-deps chromium
+# That step adds ~200MB to the EC2 image and requires sudo for the
+# `--with-deps` (libnss3, libatk-bridge, etc.). Without those deps,
+# Chromium fails to launch and the scrapers log a warning + skip.
+playwright==1.45.0
+
+# Utilities
+python-dotenv==1.2.2
+aiohttp==3.13.4
+aiofiles==24.1.0
+httpx==0.27.0

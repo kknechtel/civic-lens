@@ -1,0 +1,29 @@
+code: NJ
+name: New Jersey
+records_law:
+  name: Open Public Records Act
+  short: OPRA
+  citation: N.J.S.A. 47:1A-1 et seq.
+  respond_business_days: 7
+  notes: >-
+    Custodian must grant or deny within 7 business days. Requests use the
+    agency's (or the state model) OPRA form. Commercial requesters and
+    Daniel's Law redactions have special rules after the 2024 amendments.
+oversight:
+  - NJ Division of Local Government Services (DLGS) — user-friendly budgets, annual financial statements
+  - NJ Department of Education — school ACFRs, user-friendly budgets
+ai_notes:
+  - NJ schools report on GAAP/GASB; NJ municipalities use the REGULATORY basis — they are NOT directly comparable.
+  - NJ school surplus is statutorily capped at the greater of 2% of expenditures or $250K (N.J.S.A. 18A:7F-7) — do NOT apply GFOA's 16% benchmark to schools.
+  - For FY26+, CMPTRA is fully consolidated into ETR for municipalities — expect $0 CMPTRA, not a decline.
+  - Municipal net debt cannot exceed 3.5% of equalized valuation (N.J.S.A. 40A:2-6) without Local Finance Board approval.
+glossary:
+  user friendly budget: [ufb, summary budget]
+  ufb: [user friendly budget]
+  anjec: [association of new jersey environmental commissions]
+  njdep: [nj department of environmental protection, department of environmental protection]
+  njdca: [nj department of community affairs, department of community affairs]
+  dlgs: [division of local government services]
+  lfb: [local finance board]
+  njdoe: [nj department of education, department of education]
+  opra: [open public records act, records request]

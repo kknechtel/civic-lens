@@ -1,0 +1,35 @@
+code: NY
+name: New York
+records_law:
+  name: Freedom of Information Law
+  short: FOIL
+  citation: N.Y. Public Officers Law §§ 84-90
+  acknowledge_business_days: 5
+  respond_business_days: 20
+  notes: >-
+    Agency must respond within 5 business days (grant, deny, or acknowledge
+    with an approximate date). If acknowledged, it must grant or deny within
+    20 business days of the acknowledgment, absent a written explanation and
+    a date certain. Denials may be appealed within 30 days to the agency's
+    records-access appeals officer, who has 10 business days to decide.
+    The Committee on Open Government issues advisory opinions.
+oversight:
+  - NY Office of the State Comptroller (OSC) — local government audits, Fiscal Stress Monitoring System, Annual Financial Reports (AUD)
+  - NY State Education Department (NYSED) — school property tax report cards, ST-3 financial reports
+ai_notes:
+  - NY local governments file an Annual Financial Report (AUD) with the State Comptroller; audited GAAP statements are separate and can differ from the AUD.
+  - The NY property tax cap (General Municipal Law §3-c) limits levy growth to the lesser of 2% or CPI (plus exclusions); exceeding it requires a 60% governing-body override vote for cities, towns and villages.
+  - School budgets go to a public vote each May; school tax-cap overrides need 60% voter approval.
+  - The State Comptroller's Fiscal Stress Monitoring System scores municipalities as "significant", "moderate", "susceptible" or "no designation" — cite the year when quoting a score.
+  - Cities in NY are subject to a constitutional tax limit on the real property tax levy (percentage of five-year average full valuation).
+glossary:
+  foil: [freedom of information law, records request]
+  osc: [office of the state comptroller, state comptroller]
+  aud: [annual financial report, annual update document]
+  fsms: [fiscal stress monitoring system, fiscal stress]
+  nysed: [new york state education department, state education department]
+  boces: [board of cooperative educational services]
+  pilot: [payment in lieu of taxes]
+  ida: [industrial development agency]
+  mta: [metropolitan transportation authority]
+  lirr: [long island rail road]

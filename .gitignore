@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+.env.development
+.env.production
+
+# Build
+.next/
+out/
+dist/
+*.egg-info/
+*.tsbuildinfo
+# Cloudflare Wrangler local state
+.wrangler/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+pgdata/
+
+# Local storage (document refs)
+api/storage/
+
+# Scratch / local-only working files
+tmp/
+# Playwright test scaffolding holds storageState.json (auth tokens)
+web/screenshots/
+# Claude Code project config (personal)
+.claude/
+
+# YouTube auth cookies for yt-dlp — contains live session tokens, must
+# never be committed. Lives at $YT_COOKIES_PATH (default /opt/civic-lens/yt-cookies.txt) on
+# prod; rotate every few weeks by re-exporting.
+yt-cookies.txt
+yt-cookies-*.txt
+
+# SSM command output dumps and Secrets Manager exports often contain
+# credentials in plaintext (DB URLs, API keys). Never commit.
+ssm_*.json
+sm.json
+
+api/tests/.pytest_cache/

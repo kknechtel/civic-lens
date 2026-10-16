@@ -1,0 +1,296 @@
+# City of Long Beach, New York (Nassau County, Long Island)
+#
+# Source research: 2026-10-15/16. See README.md in this folder for the full
+# inventory, platform notes and open gaps.
+#
+# IMPORTANT — longbeachny.gov robots.txt disallows all crawlers except named
+# search engines (`User-agent: * / Disallow: /`). The city sources below stay
+# robots-compliant and will report "robots.txt disallows" until the City
+# Clerk grants permission. Once granted, set `respect_robots: false` and fill
+# `permission_note` on each longbeachny.gov source.
+
+name: City of Long Beach
+short_name: Long Beach
+government_type: city
+state: NY
+county: Nassau
+timezone: America/New_York
+fiscal_year:
+  start_month: 7          # city FY runs July 1 – June 30 (audits "as of June 30")
+  school_start_month: 7
+
+branding:
+  app_name: Long Beach Civic Lens
+  tagline: City records, meetings & local events — searchable
+  theme_color: "#1f4e79"
+  public_origin: http://localhost:3000
+
+features:
+  financial: true
+  meetings: true
+  events: true
+  presentations: true
+  contracts: true
+  alerts: true
+
+entities:
+  - key: long_beach
+    label: City of Long Beach
+    short: City
+    kind: municipal
+    description: City of Long Beach, NY — City Council, City Manager, Comptroller, Zoning Board of Appeals, Planning Board, Architectural Review Board, LBPD, LBFD, DPW, Parks & Rec
+    aliases: [long beach, city of long beach, lbpd, lbfd, longbeachny]
+  - key: lbcsd
+    label: Long Beach City School District
+    short: LBCSD
+    kind: school
+    description: Long Beach City School District (Board of Education, district schools, school budget vote)
+    aliases: [lbcsd, long beach public schools, long beach school district, board of education]
+  - key: lb_library
+    label: Long Beach Public Library
+    short: Library
+    kind: special_district
+    description: Long Beach Public Library (Board of Trustees, budget vote)
+    aliases: [long beach public library, library board of trustees]
+  - key: nassau
+    label: Nassau County
+    short: County
+    kind: county
+    description: Nassau County government — Legislature, County Executive, Department of Assessment, Nassau County Police
+    aliases: [nassau county, county of nassau]
+  - key: state
+    label: State of New York
+    short: NYS
+    kind: state
+    description: New York State agencies — Office of the State Comptroller (audits, fiscal stress), NYSED, DEC, MTA/LIRR
+    aliases: [new york state, office of the state comptroller, osc]
+
+ai:
+  background: |
+    CITY FACTS:
+    - Long Beach is a city in Nassau County on Long Island, NY, on the barrier island between Reynolds Channel and the Atlantic Ocean. ZIP 11561.
+    - Council-manager form: a five-member City Council elects its President; a City Manager runs day-to-day operations.
+    - City Council meets the first and third Tuesday of each month at 7:00 PM, City Hall 6th floor (1 West Chester Street). Meetings are live-streamed on the city YouTube channel.
+    - The city fiscal year runs July 1 – June 30; audited financial statements are "as of June 30".
+    - The NY State Comptroller has scored the city as being in "significant fiscal stress" in its Fiscal Stress Monitoring System — always cite the year of any score from the source document.
+    - Major recurring topics: post-Hurricane Sandy (2012) recovery and resiliency projects, boardwalk, beach operations and beach-pass revenue, the Superblock/oceanfront development, tax certiorari settlements, judgments and claims, borrowing and deficit financing.
+    - Long Beach Branch of the LIRR terminates in Long Beach.
+    SCHOOL DISTRICT:
+    - Long Beach City School District is a separate government with its own Board of Education, budget (May public vote) and July–June fiscal year. Do not mix district and city figures.
+    LIBRARY:
+    - Long Beach Public Library is a separate entity with its own Board of Trustees and budget vote.
+  notes:
+    - Long Beach is a CITY, not a village or town — city-specific rules (constitutional tax limit, city charter) apply; Town of Hempstead documents are about a different government.
+    - City budget and audit years are July–June; label them like "FY 2025-26".
+
+search:
+  earliest_year: 1995
+  glossary:
+    lb: [long beach]
+    lbcsd: [long beach city school district, long beach public schools]
+    lbpd: [long beach police department]
+    lbfd: [long beach fire department]
+    zba: [zoning board of appeals]
+    arb: [architectural review board]
+    superblock: [superblock development, oceanfront development]
+    beach pass: [beach permit, beach fees]
+    tax cert: [tax certiorari, assessment challenge]
+    certiorari: [tax cert, assessment challenge]
+  department_aliases:
+    lbpd: Police
+    long beach police: Police
+    long beach police department: Police
+    lbfd: Fire
+    long beach fire department: Fire
+    comptroller: Finance
+    city comptroller: Finance
+    city manager: City Manager
+    zoning board of appeals: Zoning Board
+    architectural review board: Architectural Review Board
+    arb: Architectural Review Board
+
+sources:
+  # ── City of Long Beach (longbeachny.gov, Catalis GovOffice CMS) ──────────
+  # Blocked by robots.txt until permission is granted (see header).
+  - id: city_council
+    label: City Council agendas & proceedings
+    adapter: html_index
+    entity: long_beach
+    params:
+      start_urls: [https://www.longbeachny.gov/councilmeetings]
+      follow_pattern: 'index\.asp\?SEC=443D12D5-7EB6-47F2-B2CE-BA33F15CF0E2&DE='
+      max_depth: 1
+      link_pattern: '/vertical/sites/.+\.pdf'
+      doc_type_rules:
+        - {pattern: 'proceeding|minutes', doc_type: minutes}
+        - {pattern: 'agenda|backup', doc_type: agenda}
+        - {pattern: 'personnel', doc_type: report}
+  - id: city_finance
+    label: Budgets, audits, capital plan & reports
+    adapter: html_index
+    entity: long_beach
+    params:
+      start_urls:
+        - https://www.longbeachny.gov/budget
+        - https://www.longbeachny.gov/audit
+        - https://www.longbeachny.gov/capitalplan
+        - https://www.longbeachny.gov/reports
+        - https://www.longbeachny.gov/scorecards
+        - https://www.longbeachny.gov/contracts
+      link_pattern: '/vertical/sites/.+\.pdf'
+      doc_type_rules:
+        - {pattern: 'audit|financial statement', doc_type: audit}
+        - {pattern: 'budget', doc_type: budget}
+        - {pattern: 'capital', doc_type: planning}
+        - {pattern: 'contract|agreement', doc_type: contract}
+  - id: city_land_use
+    label: Zoning Board, Planning Board & ARB
+    adapter: html_index
+    entity: long_beach
+    params:
+      start_urls:
+        - https://www.longbeachny.gov/zoning
+        - https://www.longbeachny.gov/zoningarchive
+        - https://www.longbeachny.gov/planning
+      link_pattern: '/vertical/sites/.+\.pdf'
+      doc_type_rules:
+        - {pattern: 'calendar|agenda', doc_type: agenda}
+        - {pattern: 'minutes', doc_type: minutes}
+        - {pattern: 'decision', doc_type: zoning_application}
+  - id: city_rfps
+    label: Bids & RFPs
+    adapter: html_index
+    entity: long_beach
+    doc_type: bid
+    params:
+      start_urls: ['https://www.longbeachny.gov/index.asp?Type=B_EV&SEC={CA0462DB-C2CA-4A7A-A447-6FB4C8E1C5B5}']
+      follow_pattern: 'Type=B_EV.*DE='
+      max_depth: 1
+      max_pages: 150
+      link_pattern: '/vertical/sites/.+\.(pdf|docx?)'
+  - id: city_code
+    label: Code of Ordinances & Charter
+    adapter: html_index
+    entity: long_beach
+    doc_type: ordinance
+    params:
+      start_urls: ['https://www.longbeachny.gov/index.asp?SEC=1A40DC3F-AB22-4EF5-8107-35B30A446295&DE=46CE5630-0337-4BAF-9880-017D43D760BB']
+      link_pattern: '/vertical/sites/.+\.pdf'
+
+  # ── City meeting video (YouTube RSS; robots-allowed) ─────────────────────
+  - id: city_youtube
+    label: City meetings (YouTube)
+    adapter: youtube_channel
+    entity: long_beach
+    doc_type: recording_council
+    params:
+      channel_id: UCQZnJLJW2wI83_FZRc53-Wg
+      title_pattern: 'council|planning|zoning|board|hearing|budget'
+      meeting_body: Long Beach City Council
+
+  # ── Long Beach City School District (lbeach.org, ParentSquare Smart Sites) ─
+  - id: lbcsd_board
+    label: Board of Education agendas, minutes & notices
+    adapter: html_index
+    entity: lbcsd
+    category: school
+    params:
+      start_urls: [https://www.lbeach.org/information-meetings-agendas-2]
+      allow_domains: [files.smartsites.parentsquare.com]
+      link_pattern: 'files\.smartsites\.parentsquare\.com/11147/.+\.pdf'
+      group_selector: li.ss-accordion-record
+      group_heading_selector: h3.ss-accordion-heading
+      doc_type_rules:
+        - {pattern: 'minutes', doc_type: minutes}
+        - {pattern: 'agenda', doc_type: agenda}
+        - {pattern: 'notice', doc_type: notice}
+      min_year: 2020
+  - id: lbcsd_board_archive
+    label: Board of Education archive (2007–2019)
+    adapter: html_index
+    entity: lbcsd
+    category: school
+    historical: true
+    params:
+      start_urls: [https://www.lbeach.org/information-meetings-agendas-2]
+      allow_domains: [files.smartsites.parentsquare.com]
+      link_pattern: 'files\.smartsites\.parentsquare\.com/11147/.+\.pdf'
+      group_selector: li.ss-accordion-record
+      group_heading_selector: h3.ss-accordion-heading
+      doc_type_rules:
+        - {pattern: 'minutes', doc_type: minutes}
+        - {pattern: 'agenda', doc_type: agenda}
+        - {pattern: 'notice', doc_type: notice}
+      max_year: 2019
+  - id: lbcsd_budget
+    label: School budget documents
+    adapter: html_index
+    entity: lbcsd
+    category: school
+    doc_type: budget
+    params:
+      start_urls:
+        - https://www.lbeach.org/budget-info-2025-2026
+        - https://www.lbeach.org/budget-information
+        - https://www.lbeach.org/budget-archive-2
+      allow_domains: [files.smartsites.parentsquare.com]
+      link_pattern: 'files\.smartsites\.parentsquare\.com/11147/.+\.pdf'
+  - id: lbcsd_youtube
+    label: Board of Education meetings (YouTube)
+    adapter: youtube_channel
+    entity: lbcsd
+    category: school
+    doc_type: recording_school_board
+    params:
+      channel_id: UCzst8qfrB66Ur7JrZHfodyw
+      title_pattern: 'board|boe|budget|meeting'
+      meeting_body: Long Beach Board of Education
+
+  # ── Long Beach Public Library ────────────────────────────────────────────
+  - id: library_board
+    label: Library Board of Trustees
+    adapter: html_index
+    entity: lb_library
+    params:
+      start_urls:
+        - https://longbeachlibrary.org/library-board-of-trustees/
+        - https://longbeachlibrary.org/budget-information/
+      link_pattern: 'longbeachlibrary\.org/wp-content/uploads/\d{4}/\d{2}/.+\.pdf'
+      doc_type_rules:
+        - {pattern: 'minutes', doc_type: minutes}
+        - {pattern: 'agenda', doc_type: agenda}
+        - {pattern: 'budget', doc_type: budget}
+
+  # ── NY State Comptroller ─────────────────────────────────────────────────
+  - id: osc_audits
+    label: State Comptroller audits (city & school district)
+    adapter: html_index
+    entity: state
+    doc_type: audit
+    params:
+      start_urls: ['https://www.osc.ny.gov/local-government/audits?combine=Long%20Beach']
+      title_from: row
+      follow_pattern: 'osc\.ny\.gov/local-government/audits/[^?]+/\d{4}/'
+      max_depth: 1
+      max_pages: 60
+      link_pattern: 'osc\.ny\.gov/files/local-government/audits/.+long-beach.*\.pdf'
+
+  # ── Police press releases (WordPress feed; last post May 2024) ───────────
+  - id: lbpd_press
+    label: LBPD press releases
+    adapter: rss
+    entity: long_beach
+    doc_type: notice
+    enabled: false   # feed is stale since 2024; enable if LBPD resumes posting
+    params:
+      url: https://www.lbpd.com/category/press-releases/feed/
+      link_pattern: 'lbpd\.com/'
+
+events:
+  venues:
+    - name: Long Beach Public Library
+      city: Long Beach
+      adapter: ical
+      params:
+        url: https://longbeachpl.librarycalendar.com/events/feed/ical
+        event_type: community

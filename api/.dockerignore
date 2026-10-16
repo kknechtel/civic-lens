@@ -1,0 +1,23 @@
+# Local-filesystem document store. 2.4GB on the dev machine, useless in
+# prod (S3 is the backend there). Without this exclusion every `docker build`
+# ships ~2.5GB of build context and bakes it into the image.
+storage/
+
+# Local DB dumps, OS junk, editor scratch
+*.pyc
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Secrets must never enter the image — these are mounted from Secrets Manager
+# in prod and from .env locally.
+.env
+.env.*
+!.env.example
+
+# Local scrape logs / artifacts
+scrape.log
+*.log

@@ -1,0 +1,16 @@
+[Unit]
+Description=Trigger meeting-recording transcribe + summarize worker
+Requires=civic-transcribe.service
+
+[Timer]
+# Fire 5 minutes after the previous run completed. With Type=oneshot in the
+# service, OnUnitInactiveSec gates the next run on completion — no
+# overlapping invocations.
+OnBootSec=2min
+OnUnitInactiveSec=5min
+Unit=civic-transcribe.service
+# Survive missed ticks (e.g. while EC2 was stopped) by firing once on boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

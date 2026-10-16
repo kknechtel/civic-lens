@@ -1,0 +1,57 @@
+{
+  "name": "atlantic-highlands",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@heroicons/react": "^2.1.5",
+    "@tailwindcss/typography": "^0.5.19",
+    "@tanstack/react-query": "^5.51.21",
+    "@tiptap/extension-image": "^2.6.6",
+    "@tiptap/extension-link": "^2.6.6",
+    "@tiptap/extension-placeholder": "^2.6.6",
+    "@tiptap/extension-table": "^2.6.6",
+    "@tiptap/extension-table-cell": "^2.6.6",
+    "@tiptap/extension-table-header": "^2.6.6",
+    "@tiptap/extension-table-row": "^2.6.6",
+    "@tiptap/react": "^2.6.6",
+    "@tiptap/starter-kit": "^2.6.6",
+    "@types/leaflet": "^1.9.21",
+    "chart.js": "^4.5.1",
+    "highlight.js": "^11.11.1",
+    "isomorphic-dompurify": "^3.12.0",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.436.0",
+    "marked": "^17.0.5",
+    "next": "^15.5.18",
+    "react": "^18.3.1",
+    "react-chartjs-2": "^5.2.0",
+    "react-dom": "^18.3.1",
+    "react-dropzone": "^14.2.3",
+    "react-leaflet": "^4.2.1",
+    "react-live": "^4.1.8",
+    "react-pdf": "^10.4.1",
+    "recharts": "^3.8.1",
+    "tiptap-markdown": "^0.8.10",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "20.17.6",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.14",
+    "tailwindcss": "^3.4.19",
+    "tsx": "^4.22.0",
+    "typescript": "5.8.2"
+  },
+  "overrides": {
+    "postcss": "^8.5.14"
+  }
+}

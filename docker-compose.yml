@@ -1,0 +1,56 @@
+# Local / single-box deployment.
+#   cp .env.example .env    # set MUNICIPALITY, JWT_SECRET, optional API keys
+#   docker compose up --build
+#   docker compose exec api python create_admin.py you@example.org
+#   docker compose exec api python -m scripts.scheduled_scrape   # first crawl
+services:
+  db:
+    # Postgres 16 with pgvector; database.py creates the extension on boot.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: civiclens
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d civiclens"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/civiclens
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      LOCAL_STORAGE_DIR: /data/documents
+      ALLOWED_ORIGINS: ${PUBLIC_WEB_ORIGIN:-http://localhost:3000}
+    volumes:
+      - documents:/data/documents
+      # Edit profiles without rebuilding: restart the api after changes.
+      - ./municipalities:/municipalities:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    # The API shares the box with OCR and transcription; cap it so a big
+    # batch can't starve Postgres.
+    mem_limit: ${API_MEM_LIMIT:-2g}
+
+  web:
+    build: ./web
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  documents:

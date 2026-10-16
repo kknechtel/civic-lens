@@ -1,0 +1,269 @@
+# Atlantic Highlands, NJ — the original deployment (ahnj.info).
+#
+# Most sources still use hand-written crawlers ("legacy" adapter) ported from
+# the original app; source ids match the old crawler names so existing rows'
+# metadata.source_site keeps mapping to the right entity.
+name: Borough of Atlantic Highlands
+short_name: Atlantic Highlands
+government_type: borough
+state: NJ
+county: Monmouth
+timezone: America/New_York
+fiscal_year:
+  start_month: 1
+  school_start_month: 7
+branding:
+  app_name: Atlantic Highlands
+  theme_color: '#385854'
+  public_origin: https://ahnj.info
+  # Copy branding/dashboard-banner.jpg into web/public/ when deploying AH.
+  banner_url: /dashboard-banner.jpg
+  banner_alt: Sunset over Raritan Bay from Atlantic Highlands
+entities:
+- key: atlantic_highlands
+  label: Borough of Atlantic Highlands
+  short: AH
+  kind: municipal
+  description: Borough of Atlantic Highlands (council, planning board, harbor commission, zoning, police, DPW)
+  aliases:
+  - atlantic highlands
+  - ahnj
+  - ahpd
+  - ahvfd
+- key: highlands
+  label: Borough of Highlands
+  short: Highlands
+  kind: municipal
+  description: Borough of Highlands — a DIFFERENT neighboring town (Navesink Ave, "Borough of Highlands", Highlands
+    council)
+  aliases:
+  - highlands borough
+- key: hhrsd
+  label: Henry Hudson Regional School District
+  short: HHRSD
+  kind: school
+  description: Henry Hudson Regional School District / Tri-District / AH Elementary / Highlands Elementary / Henry
+    Hudson Regional HS
+  aliases:
+  - hhrsd
+  - tri-district
+  - tridistrict
+  - ahes
+  - hhrs
+  - henry hudson
+- key: regional
+  label: Monmouth County
+  short: County
+  kind: county
+  description: Monmouth County or other regional bodies
+- key: state
+  label: State of New Jersey
+  short: NJ
+  kind: state
+  description: State of New Jersey agencies
+ai:
+  background: |-
+    BOROUGH FACTS:
+    - Atlantic Highlands is a borough in Monmouth County, NJ (pop ~4,318, 2025 est)
+    - Borough form (weak mayor / strong council) under New Jersey's Faulkner Act
+    - Mayor: Lori Hohenleitner (D, term ends Dec 2027). 6-member council, staggered 3-year terms
+    - Borough Hall: 100 First Avenue. ZIP: 07716. Bayshore Region on Raritan Bay
+    - Notable: Mount Mitchill (highest point on eastern seaboard south of Maine), SeaStreak ferry to Manhattan
+    - Municipal harbor: 715 watercraft capacity, largest on East Coast
+    - Key boards: Planning, Zoning, Environmental Commission, Historic Preservation, Harbor Commission
+    - Volunteer Fire: Hook & Ladder Co. No. 1, AH Hose Co. No. 1, Robert B. Mantell Hose Co. No. 2
+
+    SCHOOL DISTRICT (major restructuring 2022-2024):
+    - Pre-July 2024 "Tri-District": AH School District (AHES, PreK-6), Highlands SD (PreK-6), Henry Hudson Regional HS (7-12). Shared superintendent since June 2021.
+    - January 2022: Governor Murphy signed S-3488. Kean University feasibility estimated $270K one-time savings.
+    - September 2023: AH and Highlands voters approved consolidation referendum.
+    - July 1, 2024: New Henry Hudson Regional School District operational (PreK-12).
+    - Schools: AHES (282), Highlands Elementary (153), HHRS (278). ~725 students total, 8.4:1 ratio.
+    - Superintendent: Dr. Tara Beams. Business Admin: Janet Sherlock. 9-member board (5 Highlands, 4 AH).
+    - Sea Bright dispute (2024-present): Sea Bright seeking to leave Oceanport/Shore Regional and join Henry Hudson. NJ Supreme Court ruled Sea Bright has standing.
+
+    KEY HISTORICAL EVENTS IN DOCUMENTS:
+    - 2012-2018: Superstorm Sandy — AH received $17.2M in federal aid (largest of any NJ municipality). FEMA STEP, RREM grants.
+    - 2022-2024: School regionalization — S-3488, Kean study, voter referendum, district consolidation.
+    - 2024 election: $500K wrongdoing allegations investigated and found unfounded (Two River Times).
+    - Waterfront development: Brant Point project (16 upscale homes, starting $2.8M).
+    - 2024 tax rate: 1.665 general rate. Municipal rate decreased 2020-2024 while property values rose.
+
+    DOCUMENT LIBRARY: 5,000+ indexed documents (2004-present): budgets, audits, financial statements, council minutes/agendas, ordinances, resolutions, school board minutes, CAFRs, legal documents.
+  notes:
+  - Henry Hudson Regional School District is a 7/1/2024 consolidation of three predecessor districts (AHSD, HSD,
+    HHRS-HS). Pre-7/1/2024 figures are from the predecessors and CANNOT be summed naively.
+  - '"Highlands" (Borough of Highlands) is a DIFFERENT town from Atlantic Highlands — never attribute a Highlands
+    record to Atlantic Highlands.'
+search:
+  earliest_year: 1990
+  glossary:
+    ahnj:
+    - atlantic highlands
+    - borough of atlantic highlands
+    ah:
+    - atlantic highlands
+    hhrsd:
+    - henry hudson regional school district
+    - henry hudson
+    ahes:
+    - atlantic highlands elementary school
+  department_aliases:
+    ahpd: Police
+    atlantic highlands police: Police
+    atlantic highlands police department: Police
+    ahvfd: Fire
+    atlantic highlands fire: Fire
+    atlantic highlands volunteer fire: Fire
+    henry hudson regional school district: HHRSD
+    henry hudson regional: HHRSD
+    hhrsd: HHRSD
+    atlantic highlands elementary: AHES
+    atlantic highlands elementary school: AHES
+    ahes: AHES
+sources:
+- id: ahnj
+  description: "Borough website — Planning Board, Council Archives, Budgets, Ordinances, Annual Audits"
+  label: ahnj.com
+  adapter: legacy
+  entity: atlantic_highlands
+  params:
+    class: AHNJCrawler
+- id: ecode360
+  description: "Document archive — Agendas, Minutes, Resolutions, Legislation, Budgets"
+  note: "Cloudflare Turnstile protected — requires a browser. Currently skipped on the server (no Chrome installed); results will show 0 found."
+  label: ecode360.com
+  adapter: ecode360
+  entity: atlantic_highlands
+  params:
+    customer: AT0153
+- id: tridistrict
+  description: "HHRSD + AHES + HES + HHRS — BOE Agendas/Minutes, Budget, Curriculum, Performance Reports"
+  label: tridistrict.org
+  adapter: legacy
+  entity: hhrsd
+  category: school
+  params:
+    class: TriDistrictCrawler
+- id: nj_state
+  description: ACFR school finance (0130, 2120, 2160), Sea Bright court opinions, Master Plan, DCA UFB
+  label: NJ State / Courts
+  adapter: legacy
+  entity: state
+  params:
+    class: NJStateCrawler
+- id: police
+  description: SpotCrime, CrimeMapping, Nixle, AHPD page
+  note: "Limited — these are mostly interactive maps, not document repositories."
+  label: Police/Crime Data
+  adapter: legacy
+  entity: atlantic_highlands
+  params:
+    class: PoliceCrawler
+- id: fire
+  description: PulsePoint, Monmouth County OEM, Fire Dept reports
+  note: "Limited — interactive feeds."
+  label: Fire/EMS Data
+  adapter: legacy
+  entity: atlantic_highlands
+  params:
+    class: FireCrawler
+- id: county
+  description: County clerk archives, property records, tax data
+  label: Monmouth County
+  adapter: legacy
+  entity: regional
+  params:
+    class: CountyCrawler
+- id: census
+  description: Demographics, income, housing, poverty data via Census API
+  label: Census ACS Data
+  adapter: legacy
+  entity: atlantic_highlands
+  params:
+    class: CensusCrawler
+- id: highlands_borough
+  description: "Borough of Highlands — regionalization, council letters, public docs"
+  label: highlandsnj.gov
+  adapter: legacy
+  entity: highlands
+  params:
+    class: HighlandsBoroughCrawler
+- id: highlands_meetings
+  description: Highlands Borough Council meeting agendas + packets
+  label: highlands-nj.municodemeetings.com
+  adapter: legacy
+  entity: highlands
+  params:
+    class: HighlandsMeetingsCrawler
+- id: ah_recordings
+  description: Atlantic Highlands Council, Planning Board, and Harbor Commission audio recordings (.wma/.wav)
+  note: Last 12 months only. Files are uploaded to S3; transcribe + summarize via the Meetings page.
+  label: AH meeting recordings (audio)
+  adapter: legacy
+  entity: atlantic_highlands
+  params:
+    class: AHRecordingsCrawler
+- id: hhrsd_recordings
+  description: Henry Hudson Regional School District board meeting videos from tridistrict.org
+  note: Metadata-only ingest. Player + transcript come from YouTube embed + auto-captions on the Meetings page.
+  label: HHRSD BOE recordings (YouTube)
+  adapter: legacy
+  entity: hhrsd
+  category: school
+  params:
+    class: HHRSDRecordingsCrawler
+- id: opra
+  description: Crowdsourced OPRA public records requests for Atlantic Highlands
+  note: "Cloudflare protected — requires a browser. Currently skipped on the server (no Chrome installed)."
+  label: OPRAmachine
+  adapter: legacy
+  entity: atlantic_highlands
+  enabled: false
+  params:
+    class: OPRACrawler
+events:
+  venues:
+  - name: The Proving Ground
+    city: Highlands
+    adapter: html
+    parser: parse_proving_ground
+    params:
+      url: https://www.theprovingground.com/events
+  - name: The Seafarer
+    city: Highlands
+    adapter: html
+    parser: parse_seafarer
+    params:
+      url: https://www.seafarernj.com/
+  - name: The Sandbox at Seastreak
+    city: Highlands
+    adapter: playwright_paginated
+    parser: parse_sandbox
+    params:
+      url: https://sandbox.seastreak.com/
+      next_selector: span.week-next
+      steps: 12
+      wait_between_ms: 1200
+      wait_for_selector: div.event
+  - name: Drifthouse by David Burke
+    city: Sea Bright
+    adapter: playwright
+    parser: parse_drifthouse
+    params:
+      url: https://drifthousenj.com/events/
+      wait_for_selector: null
+  - name: The Chubby Pickle
+    city: Highlands
+    adapter: playwright
+    parser: parse_chubby_pickle_dom
+    params:
+      url: https://thechubbypicklenj.com/calendar/
+      wait_for_selector: .jet-listing-grid__item, .jet-listing-grid-item
+  - name: Donovan's Reef
+    city: Sea Bright
+    adapter: playwright
+    parser: parse_donovans_dom
+    params:
+      url: https://www.donovansreefbeachbar.com/calendar
+      wait_for_selector: div[class*="bg-event"], .beatgig-event

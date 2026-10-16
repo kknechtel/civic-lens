@@ -1,0 +1,199 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Brand teal scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #5aa39c;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #385854;
+}
+
+/* Mobile-friendly adjustments */
+@media (max-width: 768px) {
+  .prose {
+    font-size: 14px;
+  }
+  /* iOS auto-zooms when a text input has a font-size below 16px. Bump every
+     text input / textarea up to 16px on mobile so focusing a field no longer
+     fires the unwanted zoom. Selects don't trigger the zoom behavior on iOS,
+     so we leave their compact sizing alone. */
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  input[type="password"],
+  input[type="number"],
+  input[type="date"],
+  input[type="datetime-local"],
+  input:not([type]),
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Prose inside chat bubbles - tighter spacing */
+.enhanced-markdown.prose {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.enhanced-markdown.prose h1,
+.enhanced-markdown.prose h2,
+.enhanced-markdown.prose h3,
+.enhanced-markdown.prose h4 {
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+  color: #385854;
+}
+.enhanced-markdown.prose h1 { font-size: 1.25rem; }
+.enhanced-markdown.prose h2 { font-size: 1.1rem; }
+.enhanced-markdown.prose h3 { font-size: 1rem; }
+.enhanced-markdown.prose p {
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+}
+.enhanced-markdown.prose ul,
+.enhanced-markdown.prose ol {
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
+  padding-left: 1.2em;
+}
+.enhanced-markdown.prose li {
+  margin-top: 0.15em;
+  margin-bottom: 0.15em;
+}
+.enhanced-markdown.prose table {
+  font-size: 0.8rem;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.enhanced-markdown.prose th,
+.enhanced-markdown.prose td {
+  padding: 0.3em 0.6em;
+  border: 1px solid #e5e7eb;
+}
+.enhanced-markdown.prose th {
+  background: #f9fafb;
+  font-weight: 600;
+}
+.enhanced-markdown.prose strong {
+  color: #1f2937;
+}
+.enhanced-markdown.prose a {
+  color: #385854;
+  text-decoration: underline;
+}
+.enhanced-markdown.prose code {
+  font-size: 0.8em;
+  background: #f1f5f9;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+.enhanced-markdown.prose pre {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 0.75em 1em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+  font-size: 0.8rem;
+}
+.enhanced-markdown.prose blockquote {
+  border-left: 3px solid #385854;
+  padding-left: 0.75em;
+  color: #6b7280;
+  margin: 0.5em 0;
+}
+
+/* iPhone safe area for bottom nav */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Side-panel layout shift — when CitationPreview or WebReferencePreview
+   is open, slide the deck content left so it doesn't sit underneath the
+   panel. The panel itself is position:fixed so it doesn't reflow the
+   page; this just narrows the deck container. */
+.ah-deck { transition: padding-right 200ms ease; }
+body.ah-preview-open .ah-deck { padding-right: min(960px, 60vw); }
+@media (max-width: 768px) {
+  body.ah-preview-open .ah-deck { padding-right: 0; }
+}
+
+/* Cover banner used by PresentationViewer */
+.ah-deck-cover {
+  background: linear-gradient(135deg, #385854 0%, #2f4d49 100%);
+  color: white;
+  border-radius: 12px 12px 0 0;
+  padding: 2rem 2.5rem 2.25rem;
+}
+.ah-cover-eyebrow {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  opacity: 0.75;
+  margin-bottom: 0.5rem;
+}
+.ah-cover-title {
+  font-size: 1.875rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 0.5rem;
+}
+.ah-cover-subtitle {
+  font-size: 1rem;
+  opacity: 0.9;
+  margin-bottom: 0.75rem;
+}
+.ah-cover-meta {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+/* Section heading rules — teal underline under each section's h2 */
+.ah-section h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1f2937;
+  border-bottom: 2px solid #385854;
+  padding-bottom: 0.4rem;
+  margin: 0 0 1rem;
+}
+
+/* Footer */
+.ah-deck-footer {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+.ah-deck-wordmark {
+  font-weight: 700;
+  color: #385854;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+.ah-deck-meta { font-size: 0.7rem; opacity: 0.8; }
+

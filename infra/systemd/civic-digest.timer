@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily run of the Civic Lens alert digest
+
+[Timer]
+# 11:30 UTC = 7:30am ET — 30 min after civic-scraper.timer, so the digest
+# picks up everything the morning scrape just ingested. Weekly alerts
+# fire on Mondays only; the worker decides per-row.
+OnCalendar=*-*-* 11:30:00
+Persistent=true
+Unit=civic-digest.service
+
+[Install]
+WantedBy=timers.target

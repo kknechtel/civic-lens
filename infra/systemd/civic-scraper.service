@@ -1,0 +1,43 @@
+[Unit]
+Description=Civic Lens scheduled document scraper
+After=network-online.target civic-api.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/civic-lens/api
+# Inherit ah-api's environment (DATABASE_URL, AWS creds, AHNJ_PROXY_*).
+# AHNJ_PROXY_SECRET in particular must be present or ahnj.com requests
+# return 403 from the Cloudflare Worker. Drop-in this service must have
+# the same proxy override that ah-api uses:
+#   sudo mkdir -p /etc/systemd/system/civic-scraper.service.d/
+#   sudo cp /etc/systemd/system/civic-api.service.d/ahnj-proxy.conf \
+#           /etc/systemd/system/civic-scraper.service.d/ahnj-proxy.conf
+#   sudo systemctl daemon-reload
+# The drop-in file is not in version control (it carries the secret).
+EnvironmentFile=-/etc/civic-lens.env
+# After scraping, new docs are OCR'd (text layer + Tesseract), titled and
+# summarized (flash-lite), and indexed. Tesseract must be on the host:
+#   sudo apt-get install -y tesseract-ocr tesseract-ocr-eng antiword
+
+ExecStart=/opt/civic-lens/api/venv/bin/python -m scripts.scheduled_scrape
+
+# Don't crash the timer if a scrape errors out. Errors get logged via
+# journal + persisted to scraper_runs.errors.
+# ── Resource limits ──────────────────────────────────────────────────
+# This job shares the box with the API. Without limits a large OCR or
+# transcription batch can push the host into OOM/swap and take the API
+# down with it (the Oct 2026 ahnj.info outage). The kernel kills THIS
+# unit first instead. Size MemoryMax to ~50-60% of RAM.
+MemoryHigh=900M
+MemoryMax=1200M
+MemorySwapMax=0
+CPUQuota=150%
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=4h
+OOMPolicy=kill
+
+SuccessExitStatus=0 1
+StandardOutput=journal
+StandardError=journal

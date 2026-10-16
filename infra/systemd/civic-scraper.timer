@@ -1,0 +1,16 @@
+[Unit]
+Description=Nightly full scrape of all Civic Lens sources
+
+[Timer]
+# Midnight ET — runs the full historical+recent crawl every night so the
+# digest job (civic-digest.timer at 7:30am ET) and the dashboard's
+# "Recently Added" panel pick up the previous day's posts. The TZ-aware
+# OnCalendar syntax requires systemd 252+; older systemd will refuse the
+# unit, in which case fall back to UTC math (05:00 EST / 04:00 EDT).
+OnCalendar=*-*-* 00:00:00 America/New_York
+# Run on next boot if the machine was down at the scheduled time.
+Persistent=true
+Unit=civic-scraper.service
+
+[Install]
+WantedBy=timers.target
