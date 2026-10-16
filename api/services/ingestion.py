@@ -18,6 +18,7 @@ from services.chunker import chunk_pages
 from services.embeddings import (
     embed_documents_batch,
     embed_document,
+    model_id,
     to_pgvector_literal,
 )
 
@@ -107,9 +108,9 @@ def _set_doc_embedding(db: Session, doc_id, vec) -> None:
         return
     db.execute(text("""
         UPDATE documents
-        SET embedding = CAST(:vec AS vector)
+        SET embedding = CAST(:vec AS vector), embedding_model = :model
         WHERE id = CAST(:id AS uuid)
-    """), {"id": str(doc_id), "vec": to_pgvector_literal(vec)})
+    """), {"id": str(doc_id), "vec": to_pgvector_literal(vec), "model": model_id()})
 
 
 def _set_chunk_embeddings(db: Session, pairs: list[tuple]) -> None:
@@ -130,10 +131,10 @@ def _set_chunk_embeddings(db: Session, pairs: list[tuple]) -> None:
         params[f"vec{i}"] = to_pgvector_literal(vec)
     db.execute(text(f"""
         UPDATE document_chunks AS c
-        SET embedding = v.vec
+        SET embedding = v.vec, embedding_model = :model
         FROM (VALUES {values_sql}) AS v(id, vec)
         WHERE c.id = v.id
-    """), params)
+    """), {**params, "model": model_id()})
 
 
 def ingest_document(db: Session, doc: Document, force: bool = False) -> dict:
@@ -219,12 +220,16 @@ def ingest_one(db: Session, document_id: str, force: bool = False) -> dict:
 
 
 def reembed_missing(db: Session, limit: int = 2000) -> int:
-    """Embed chunks left NULL by a failed Voyage call. Returns count fixed."""
+    """Embed chunks with no vector, or a vector from a different model than the
+    current provider (after a provider switch). Returns count fixed."""
+    if model_id() is None:
+        return 0
     rows = db.execute(text("""
         SELECT id, coalesce(context, '') || ' ' || content AS body
-        FROM document_chunks WHERE embedding IS NULL
+        FROM document_chunks
+        WHERE embedding IS NULL OR embedding_model IS DISTINCT FROM :model
         ORDER BY created_at DESC LIMIT :n
-    """), {"n": limit}).fetchall()
+    """), {"n": limit, "model": model_id()}).fetchall()
     if not rows:
         return 0
     vecs = embed_documents_batch([r.body for r in rows])

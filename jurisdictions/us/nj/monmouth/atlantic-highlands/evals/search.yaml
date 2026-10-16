@@ -1,0 +1,39 @@
+# Retrieval eval: does the search chat uses return the answer document?
+# `expect`: any returned document whose filename contains one of these counts as a hit.
+# Run: python -m scripts.eval_search atlantic-highlands-nj
+- q: Upper Prospect Road wall emergency repairs
+  expect: ["2025-068"]
+- q: how much did the town pay to fix the retaining wall on Upper Prospect?
+  expect: ["2025-068", "2025-036"]
+- q: who is the borough engineer
+  expect: ["2025-004", "2025-087"]
+- q: Rohmeyer Colliers engineering contract
+  expect: ["2025-087", "2026-047", "2026-120"]
+- q: who does the borough's grant writing
+  expect: ["2026-027"]
+- q: Aubrey Group
+  expect: ["2026-027"]
+- q: municipal attorney appointment 2026
+  expect: ["2026-002"]
+- q: Fiore Paving change order
+  expect: ["2026-054"]
+- q: did the drainage project on Hill Road go over budget
+  expect: ["2026-054"]
+- q: sewer collapse East Highland Avenue
+  expect: ["2025-061"]
+- q: emergency sewer repair
+  expect: ["2025-061"]
+- q: payment of bills January 2026
+  expect: ["2026-039"]
+- q: 2026 municipal budget adoption
+  expect: ["2026-105"]
+- q: fireworks display contract
+  expect: ["Fireworks"]
+- q: what did we spend on the fourth of July fireworks
+  expect: ["Fireworks"]
+- q: forklift purchase
+  expect: ["2026-129"]
+- q: land moved from Atlantic Highlands to Highlands
+  expect: ["2014-091"]
+- q: deannexation
+  expect: ["2014-091"]

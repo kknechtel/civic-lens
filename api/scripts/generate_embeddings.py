@@ -1,85 +1,69 @@
 """
-Generate vector embeddings for all documents using Gemini embedding API.
-Run: python scripts/generate_embeddings.py
+(Re-)embed chunks and documents with the configured provider (services.embeddings).
+
+    python -m scripts.generate_embeddings              # anything missing or from another model
+    python -m scripts.generate_embeddings --limit 5000
+
+Safe to re-run; it only touches rows whose vector is NULL or was made by a
+different model than the current one. Keyword-only deployments
+(EMBEDDINGS_PROVIDER=none) have nothing to do.
 """
-import sys, os, logging
-from pathlib import Path
+from __future__ import annotations
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
-logger = logging.getLogger(__name__)
+import argparse
+import logging
+import time
 
-from database import SessionLocal
-from models.document import Document
-from sqlalchemy import text as sql_text
-from config import GEMINI_API_KEY
+from sqlalchemy import text
+
+log = logging.getLogger("generate_embeddings")
 
 
-def embed_text(text: str) -> list[float]:
-    """Generate embedding using Google Gemini embedding API."""
-    from google import genai
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    # Truncate to ~8000 tokens worth of text
-    truncated = text[:30000]
-    result = client.models.embed_content(
-        model="models/text-embedding-004",
-        contents=truncated,
-    )
-    return result.embeddings[0].values
+def main() -> int:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--limit", type=int, default=0, help="max chunks this run (0 = all)")
+    ap.add_argument("--batch", type=int, default=1024)
+    args = ap.parse_args()
 
-
-def main():
-    db = SessionLocal()
-
-    # Get docs with extracted text but no embedding
-    docs = db.execute(sql_text("""
-        SELECT id, filename, extracted_text, notes
-        FROM documents
-        WHERE extracted_text IS NOT NULL
-        AND length(extracted_text) > 50
-        AND embedding IS NULL
-        ORDER BY created_at DESC
-        LIMIT 500
-    """)).fetchall()
-
-    print(f"Found {len(docs)} documents needing embeddings", flush=True)
-
-    embedded = 0
-    errors = 0
-    for doc in docs:
-        try:
-            # Combine notes + extracted text for richer embedding
-            text = ""
-            if doc.notes:
-                text += doc.notes + "\n\n"
-            text += doc.extracted_text[:25000]
-
-            vector = embed_text(text)
-
-            # Store as pgvector format
-            vector_str = "[" + ",".join(str(v) for v in vector) + "]"
-            db.execute(sql_text(
-                "UPDATE documents SET embedding = :vec WHERE id = :id"
-            ), {"vec": vector_str, "id": str(doc.id)})
+    from database import SessionLocal
+    from services.embeddings import embed_documents_batch, model_id
+    from services.ingestion import _set_chunk_embeddings, _set_doc_embedding
+    model = model_id()
+    if not model:
+        log.info("Embeddings provider is 'none' — search is keyword-only; nothing to embed.")
+        return 0
+    log.info("Embedding with %s", model)
+    done, t0 = 0, time.time()
+    with SessionLocal() as db:
+        while not args.limit or done < args.limit:
+            rows = db.execute(text("""
+                SELECT id, coalesce(context, '') || E'\\n' || content AS body FROM document_chunks
+                WHERE embedding IS NULL OR embedding_model IS DISTINCT FROM :m
+                ORDER BY id LIMIT :n"""), {"m": model, "n": args.batch}).fetchall()
+            if not rows:
+                break
+            vecs = embed_documents_batch([r.body for r in rows], batch_size=len(rows))
+            pairs = [(r.id, v) for r, v in zip(rows, vecs) if v is not None]
+            if not pairs:
+                log.error("provider returned no vectors; stopping")
+                return 1
+            _set_chunk_embeddings(db, pairs)
             db.commit()
-            embedded += 1
-
-            if embedded % 25 == 0:
-                print(f"  Embedded {embedded}/{len(docs)}...", flush=True)
-
-        except Exception as e:
-            errors += 1
-            if errors <= 5:
-                logger.warning(f"  Failed {doc.filename}: {e}")
-            db.rollback()
-
-        # Rate limit - Gemini has limits
-        import time
-        time.sleep(0.2)
-
-    print(f"\nDone: {embedded} embedded, {errors} errors", flush=True)
-    db.close()
+            done += len(pairs)
+            log.info("chunks: %d embedded (%.0f/s)", done, done / max(time.time() - t0, 1e-6))
+        docs = db.execute(text("""
+            SELECT id, concat_ws(' ', title, filename, notes, left(extracted_text, 32000)) AS body FROM documents
+            WHERE extracted_text IS NOT NULL AND (embedding IS NULL OR embedding_model IS DISTINCT FROM :m)"""),
+            {"m": model}).fetchall()
+        for i in range(0, len(docs), 64):
+            batch = docs[i:i + 64]
+            for d, v in zip(batch, embed_documents_batch([d.body for d in batch], batch_size=64)):
+                _set_doc_embedding(db, d.id, v)
+            db.commit()
+        log.info("documents: %d embedded. Done in %.0fs", len(docs), time.time() - t0)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

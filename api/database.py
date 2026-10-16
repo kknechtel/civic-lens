@@ -179,6 +179,13 @@ def _migrate():
         # canonical identifier; title is the display string.
         ("documents", "title", "VARCHAR"),
         ("integrity_awards", "details", "JSONB DEFAULT '{}'::jsonb"),
+        # Who paid for each AI call (user's own key vs the deployment) — caps.
+        ("llm_usage", "payer", "VARCHAR DEFAULT 'deployment'"),
+        ("llm_usage", "provider", "VARCHAR"),
+        # Which embedding model produced each vector; semantic search only
+        # compares vectors from the current model (services.embeddings).
+        ("documents", "embedding_model", "VARCHAR"),
+        ("document_chunks", "embedding_model", "VARCHAR"),
         ("documents", "doc_date", "VARCHAR"),
         # atlantic_highlands | highlands | hhrsd | regional | state — seeded
         # from metadata.source_site below, refined by services.doc_enrich.
@@ -332,14 +339,49 @@ def _migrate():
                 # Most likely pgvector wasn't installable — keep the keyword-only path working
                 logger.warning(f"Failed to add {table}.{column}: {e}")
 
+        # 3b. Vectors from the old SHA-512 "hash" fallback are all zeros and
+        # untagged; clear them so search never ranks on them and the current
+        # provider re-embeds them (ingestion.reembed_missing).
+        for table in ("document_chunks", "documents"):
+            try:
+                with conn.begin_nested():
+                    n = conn.execute(text(
+                        f"UPDATE {table} SET embedding = NULL WHERE embedding IS NOT NULL "
+                        f"AND embedding_model IS NULL AND vector_norm(embedding) = 0")).rowcount
+                if n:
+                    logger.info(f"Cleared {n} non-semantic vectors from {table}")
+                with conn.begin_nested():
+                    # Real vectors from before tagging: voyage-3 is the only
+                    # provider that ever wrote to these 1024-dim columns.
+                    conn.execute(text(
+                        f"UPDATE {table} SET embedding_model = 'voyage-3' WHERE embedding IS NOT NULL "
+                        f"AND embedding_model IS NULL"))
+            except Exception as e:
+                logger.warning(f"zero-vector cleanup skipped for {table}: {e}")
+
+        # 4a. Replace legacy IVFFlat vector indexes (see note below) with HNSW.
+        for idx in ("ix_documents_vec", "ix_chunks_vec"):
+            try:
+                with conn.begin_nested():
+                    legacy = conn.execute(text(
+                        "SELECT 1 FROM pg_indexes WHERE indexname = :i AND indexdef ILIKE '%ivfflat%'"), {"i": idx}).fetchone()
+                    if legacy:
+                        conn.execute(text(f"DROP INDEX {idx}"))
+                        logger.info(f"Dropped legacy IVFFlat index {idx}; rebuilding as HNSW")
+            except Exception as e:
+                logger.warning(f"could not replace {idx}: {e}")
+
         # 4. Indexes for fast hybrid search
         rag_indexes = [
             # GIN over tsvector for keyword
             ("ix_documents_fts", "CREATE INDEX IF NOT EXISTS ix_documents_fts ON documents USING gin(fts_vector)"),
             ("ix_chunks_fts", "CREATE INDEX IF NOT EXISTS ix_chunks_fts ON document_chunks USING gin(fts_vector)"),
             # IVFFLAT for vector cosine. Lists=100 is fine up to ~100K chunks; bump later.
-            ("ix_documents_vec", "CREATE INDEX IF NOT EXISTS ix_documents_vec ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"),
-            ("ix_chunks_vec", "CREATE INDEX IF NOT EXISTS ix_chunks_vec ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"),
+            # HNSW, not IVFFlat: IVFFlat centroids are trained once at build
+            # time (ours were built on empty/zero vectors) and probe 1 of 100
+            # lists by default, so it silently returned the wrong neighbours.
+            ("ix_documents_vec", "CREATE INDEX IF NOT EXISTS ix_documents_vec ON documents USING hnsw (embedding vector_cosine_ops)"),
+            ("ix_chunks_vec", "CREATE INDEX IF NOT EXISTS ix_chunks_vec ON document_chunks USING hnsw (embedding vector_cosine_ops)"),
             # Trigram index on filenames — powers "did you mean" via similarity().
             # gin_trgm_ops keeps query latency sub-5ms on the ~3k-doc corpus.
             ("ix_documents_filename_trgm", "CREATE INDEX IF NOT EXISTS ix_documents_filename_trgm ON documents USING gin (filename gin_trgm_ops)"),
@@ -491,6 +533,8 @@ def _migrate():
                     resource_type VARCHAR,
                     resource_id VARCHAR,
                     metadata JSONB DEFAULT '{}'::jsonb,
+                    payer VARCHAR DEFAULT 'deployment',
+                    provider VARCHAR,
                     created_at TIMESTAMP DEFAULT now()
                 )
             """))
@@ -510,6 +554,8 @@ def _migrate():
                         resource_type VARCHAR,
                         resource_id VARCHAR,
                         metadata JSONB DEFAULT '{}'::jsonb,
+                        payer VARCHAR DEFAULT 'deployment',
+                        provider VARCHAR,
                         created_at TIMESTAMP DEFAULT now()
                     )
                 """))

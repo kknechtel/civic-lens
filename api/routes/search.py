@@ -270,11 +270,15 @@ def rank_chunks(
     boosts. Returns (chunks sorted best-first, parsed, expansions, base_query)."""
     # ── 1. Parse for structured signals
     parsed = query_parser.parse(query)
-    base_query = parsed.stripped or query
+    # Inferred signals ("budget" → doc_type, "2026" → fiscal year, "town" →
+    # category) only BOOST below. As hard filters they dropped the right answer
+    # whenever the guess was off: "2026 budget adoption" is a *resolution*.
+    # Only explicit arguments filter. The user's words all stay in the query.
+    base_query = query
     merged = {
-        "fiscal_year": fiscal_year or parsed.fiscal_year,
-        "category": category or parsed.category,
-        "doc_type": doc_type or parsed.doc_type,
+        "fiscal_year": fiscal_year,
+        "category": category,
+        "doc_type": doc_type,
         # Only an explicit department filters; one inferred from the query
         # text ("harbor" -> Harbor Commission) is a boost below, since many
         # docs carry the body in their title/header rather than department.
@@ -345,6 +349,15 @@ def rank_chunks(
             base += 0.4
         c["score"] = base
     chunks.sort(key=lambda r: r["score"], reverse=True)
+
+    inferred = {k: v for k, v in (("fiscal_year", parsed.fiscal_year), ("category", parsed.category),
+                                     ("doc_type", parsed.doc_type)) if v and not merged.get(k)}
+    if inferred:
+        for c in chunks:
+            for k, v in inferred.items():
+                if str(c.get(k) or "").lower() == str(v).lower():
+                    c["score"] = float(c.get("score") or 0) + 0.1
+        chunks.sort(key=lambda r: r["score"], reverse=True)
 
     if parsed.department and not department:
         dept = parsed.department.lower()

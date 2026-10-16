@@ -1,0 +1,33 @@
+# Retrieval eval: does the search chat uses return the answer document?
+# Run: python -m scripts.eval_search long-beach-ny
+- q: aluminum sulfate chemicals contract
+  expect: ["CHEMTRADE"]
+- q: who supplies water treatment chemicals
+  expect: ["CHEMTRADE", "CHEMICALS"]
+- q: marketing and advertising contract
+  expect: ["CREATIVE ADVERTISING"]
+- q: Sanitary District 1 inter-municipal agreement
+  expect: ["SANITARY DISTRICT"]
+- q: volleyball tournaments on the beach
+  expect: ["VOLLEYBALL"]
+- q: lifeguard headquarters plumbing
+  expect: ["MACCARONE", "LIFEGUARD"]
+- q: private sewer lateral program
+  expect: ["PIPELOGIX", "SEWER LATERAL"]
+- q: fire department engine purchase
+  expect: ["10-07-2025", "10.7.25"]
+- q: how much did the new fire truck cost
+  # The 2025 engine purchase, or the lease-purchase of 4 pumper trucks: both answer it.
+  expect: ["10-07-2025", "10.7.25", "FIRE PUMPER", "Neville Apparatus"]
+- q: Allen Industries water service line repairs city hall
+  expect: ["10-07-2025", "10.7.25"]
+- q: Municity software maintenance
+  expect: ["10-07-2025", "10.7.25", "8.18.26"]
+- q: State Comptroller audit of the city
+  expect: ["audits -", "OSC Audit"]
+- q: is the city in fiscal stress
+  expect: ["S9-24-36", "B22-7-4", "fiscal", "Budget"]
+- q: proposed budget fiscal year 2027
+  expect: ["Budget Fiscal Year 2027", "2026-2027"]
+- q: 2018 single audit
+  expect: ["Single Audit - 6-30-18", "2018 Audit"]

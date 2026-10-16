@@ -10,3 +10,4 @@ from .saved_alert import SavedAlert, AlertKind, DigestFrequency
 from .event_rsvp import EventRsvp
 from .event_submission import EventSubmission, SubmissionStatus
 from .integrity import Award, PersonnelAction, Official, Contribution, IntegrityFlag
+from .ai import ApiKey, AiSetting

@@ -18,48 +18,18 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-# Per-million pricing (USD). Approximate; update when providers change rates.
-# Anthropic: https://www.anthropic.com/pricing
-# Gemini: https://ai.google.dev/pricing
-_RATES: dict[str, tuple[float, float]] = {
-    # input, output
-    "claude-opus-4-7": (15.0, 75.0),
-    "claude-sonnet-4-6": (3.0, 15.0),
-    "claude-haiku-4-5-20251001": (1.0, 5.0),
-    "gemini-2.5-flash": (0.30, 2.50),
-    "gemini-2.5-flash-lite": (0.10, 0.40),
-    "gemini-2.5-pro": (1.25, 10.0),
-    "gemini-2.0-flash": (0.10, 0.40),
-    "voyage-3-lite": (0.02, 0.0),  # embedding-only — output rate N/A
-    "voyage-3": (0.06, 0.0),
-    "tesseract": (0.0, 0.0),       # local, free
-    "pdfplumber": (0.0, 0.0),
-}
-
-
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    """Estimate USD cost for `model` at the given token counts. Falls back
-    to Sonnet pricing if the model isn't in the rate table — better to log a
-    rough number than zero, but warn so we notice unknown models."""
-    rates = _RATES.get(model)
-    if rates is None:
-        # Best-effort fuzzy match.
-        m = model.lower()
-        if "opus" in m:
-            rates = _RATES["claude-opus-4-7"]
-        elif "haiku" in m:
-            rates = _RATES["claude-haiku-4-5-20251001"]
-        elif "sonnet" in m or "claude" in m:
-            rates = _RATES["claude-sonnet-4-6"]
-        elif "gemini" in m and "pro" in m:
-            rates = _RATES["gemini-2.5-pro"]
-        elif "gemini" in m:
-            rates = _RATES["gemini-2.5-flash"]
-        else:
-            logger.warning("estimate_cost: unknown model %r — defaulting to Sonnet rates", model)
-            rates = _RATES["claude-sonnet-4-6"]
-    in_rate, out_rate = rates
-    return (input_tokens * in_rate + output_tokens * out_rate) / 1_000_000
+    """USD estimate from the deployment's rate table (services.ai.catalog,
+    editable in Admin → AI). Unknown models use their family's rate."""
+    from services.ai import estimate_cost as _est
+    try:
+        from database import SessionLocal
+        from services.ai.router import settings
+        with SessionLocal() as db:
+            rates = settings(db)["rates"]
+    except Exception:
+        rates = None
+    return _est(model, input_tokens, output_tokens, rates)[0]
 
 
 def record_usage(
@@ -74,6 +44,8 @@ def record_usage(
     resource_type: Optional[str] = None,
     resource_id: Optional[str] = None,
     metadata: Optional[dict] = None,
+    payer: str = "deployment",
+    provider: Optional[str] = None,
 ) -> None:
     """Persist one usage row. Swallows DB errors so cost-tracking failures
     never break the user-facing call. If estimated_cost_usd is omitted it's
@@ -86,10 +58,10 @@ def record_usage(
         db.execute(sql_text("""
             INSERT INTO llm_usage
                 (id, source, model, input_tokens, output_tokens,
-                 estimated_cost_usd, user_id, resource_type, resource_id, metadata)
+                 estimated_cost_usd, user_id, resource_type, resource_id, metadata, payer, provider)
             VALUES
                 (:id, :source, :model, :in_t, :out_t,
-                 :cost, :uid, :rt, :rid, CAST(:meta AS JSONB))
+                 :cost, :uid, :rt, :rid, CAST(:meta AS JSONB), :payer, :provider)
         """), {
             "id": str(uuid.uuid4()),
             "source": source,
@@ -101,6 +73,8 @@ def record_usage(
             "rt": resource_type,
             "rid": str(resource_id) if resource_id else None,
             "meta": json.dumps(metadata or {}),
+            "payer": payer,
+            "provider": provider,
         })
         db.commit()
     except Exception as exc:

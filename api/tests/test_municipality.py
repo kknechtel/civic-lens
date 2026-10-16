@@ -150,4 +150,8 @@ def test_state_glossary_merges_under_local():
 
 def test_yaml_files_parse_cleanly():
     for p in Path(JURISDICTIONS_DIR).rglob("*.yaml"):
-        assert isinstance(yaml.safe_load(p.read_text()), dict), p
+        data = yaml.safe_load(p.read_text())
+        if p.parent.name == "evals":  # eval sets are lists of {q, expect}
+            assert isinstance(data, list) and all({"q", "expect"} <= set(c) for c in data), p
+        else:
+            assert isinstance(data, dict), p
