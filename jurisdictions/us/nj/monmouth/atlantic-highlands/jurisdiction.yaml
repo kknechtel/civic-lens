@@ -47,6 +47,11 @@ entities:
   - hhrs
   - henry hudson
 ai:
+  suggested_questions:
+  - Who is the borough engineer, and how was the firm chosen?
+  - What emergency contracts has the borough awarded since 2024?
+  - How much did the borough spend on the Upper Prospect Road wall?
+  - Which vendors get the most no-bid work?
   background: |-
     BOROUGH FACTS:
     - Atlantic Highlands is a borough in Monmouth County, NJ (pop ~4,318, 2025 est)

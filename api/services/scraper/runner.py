@@ -438,6 +438,7 @@ async def run_scraper(
                     name=project_name,
                     description=f"Documents automatically scraped from {muni.short_name} public websites",
                     entity_type="town",
+                    is_public=True,
                     created_by=user_id or str(uuid.uuid4()),
                 )
                 db.add(project)

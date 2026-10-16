@@ -1,7 +1,7 @@
 """Document and project models for the document library."""
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Integer, ForeignKey, Text, Table
+from sqlalchemy import Boolean, Column, String, DateTime, Integer, ForeignKey, Text, Table
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from database import Base
@@ -23,6 +23,9 @@ class Project(Base):
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     entity_type = Column(String, nullable=True)  # "town", "school", "general"
+    # Public records (the scraped corpus) are readable by every signed-in user;
+    # editing and deleting still need ownership or an editor share.
+    is_public = Column(Boolean, default=False, nullable=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

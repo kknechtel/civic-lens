@@ -42,6 +42,7 @@ const moreItems: MoreItem[] = [
   { name: "Financials", href: "/financial-analysis", icon: DocumentTextIcon },
   { name: "Presentations", href: "/presentations", icon: PresentationChartLineIcon },
   { name: "Scraper", href: "/scraper", icon: GlobeAltIcon, adminOnly: true },
+  { name: "Settings & API keys", href: "/settings", icon: Cog6ToothIcon },
   { name: "Admin", href: "/admin", icon: Cog6ToothIcon, adminOnly: true },
 ];
 

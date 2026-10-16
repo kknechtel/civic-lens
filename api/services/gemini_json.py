@@ -10,22 +10,9 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from config import GEMINI_API_KEY
-from services.llm_models import GEMINI_FLASH_LITE
+from services.ai import pin
 
 logger = logging.getLogger(__name__)
-
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        if not GEMINI_API_KEY:
-            raise RuntimeError("GEMINI_API_KEY not configured")
-        from google import genai
-        _client = genai.Client(api_key=GEMINI_API_KEY)
-    return _client
 
 
 @dataclass
@@ -53,15 +40,23 @@ def generate_json(
     prompt: str,
     schema: dict[str, Any],
     *,
-    model: str = GEMINI_FLASH_LITE,
+    model: Optional[str] = None,
     source: str,
+    feature: str = "enrichment",
     resource_id: Optional[str] = None,
     max_output_tokens: int = 1500,
     attempts: int = 3,
 ) -> JSONResult:
     """Synchronous. Call via asyncio.to_thread from async code."""
+    from google import genai
     from google.genai import types
     from services.usage import estimate_cost, record_usage
+
+    route = pin(feature, "gemini")
+    if route is None:  # same outcome as a failed call: no data, error set
+        return JSONResult(None, error="No gemini key configured (Admin → AI)")
+    model = model or route.model
+    client = genai.Client(api_key=route.key)
 
     cfg = dict(
         temperature=0,
@@ -80,7 +75,7 @@ def generate_json(
     total_cost = 0.0
     for attempt in range(attempts):
         try:
-            resp = _get_client().models.generate_content(model=model, contents=prompt, config=config)
+            resp = client.models.generate_content(model=model, contents=prompt, config=config)
         except Exception as exc:
             last_err = str(exc)
             logger.warning("gemini %s attempt %d failed: %s", source, attempt + 1, exc)
@@ -98,7 +93,7 @@ def generate_json(
                 record_usage(db, source=source, model=model, input_tokens=in_t,
                              output_tokens=out_t, estimated_cost_usd=cost,
                              resource_type="document" if resource_id else None,
-                             resource_id=resource_id)
+                             resource_id=resource_id, payer=route.payer, provider=route.provider)
         except Exception:
             logger.debug("usage record skipped", exc_info=True)
 

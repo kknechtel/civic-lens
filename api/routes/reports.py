@@ -2,7 +2,7 @@
 import logging
 import json
 import asyncio
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,7 +12,7 @@ from models.document import Document
 from models.financial import FinancialStatement
 from models.user import User
 from auth import get_current_user
-from config import GEMINI_API_KEY
+from services.ai import pin
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -109,25 +109,23 @@ Documents:
 
     prompt = prompts.get(req.report_type, req.custom_prompt or "Write a financial report.")
 
-    if not GEMINI_API_KEY:
-        async def no_key():
-            yield f"data: {json.dumps({'type': 'delta', 'content': 'Configure GEMINI_API_KEY to generate reports.'})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        return StreamingResponse(no_key(), media_type="text/event-stream")
+    route = pin("reports", "gemini", user.id)
+    if route is None:
+        raise HTTPException(402, "Reports need a Gemini key. Add your own API key in Settings.")
 
     user_id_str = str(user.id)
 
     async def stream_report():
         from google import genai
         from google.genai import types
-        client = genai.Client(api_key=GEMINI_API_KEY)
+        client = genai.Client(api_key=route.key)
         config = types.GenerateContentConfig(temperature=0.3, max_output_tokens=16000)
 
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
             lambda: client.models.generate_content(
-                model="gemini-2.5-flash", contents=prompt, config=config,
+                model=route.model, contents=prompt, config=config,
             ),
         )
 
@@ -150,10 +148,11 @@ Documents:
                 sess = SessionLocal()
                 try:
                     record_usage(
-                        sess, source="reports", model="gemini-2.5-flash",
+                        sess, source="reports", model=route.model,
                         input_tokens=in_t, output_tokens=out_t,
                         user_id=user_id_str,
                         metadata={"report_type": getattr(req, "report_type", None)},
+                        payer=route.payer, provider=route.provider,
                     )
                 finally:
                     sess.close()

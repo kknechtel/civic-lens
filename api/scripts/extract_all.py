@@ -9,14 +9,17 @@ os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from google import genai
 from google.genai import types
-from config import GEMINI_API_KEY
+from services.ai import pin
 from services.s3_service import S3Service
 from database import SessionLocal
 from models.document import Document
 from models.financial import FinancialStatement, FinancialLineItem
 import pymupdf
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+route = pin("financial_extraction", "gemini")
+if route is None:
+    sys.exit("No gemini key configured (Admin → AI)")
+client = genai.Client(api_key=route.key)
 cfg = types.GenerateContentConfig(temperature=0.1, max_output_tokens=16000,
     thinking_config=types.ThinkingConfig(thinking_budget=0))
 db = SessionLocal()
@@ -221,7 +224,7 @@ for doc in unique:
         else:
             prompt = PROMPT.format(text=combined[:50000], fy=fy, entity_type="municipal", doc_type=doc.doc_type)
 
-        r = client.models.generate_content(model="gemini-2.5-flash", contents=prompt, config=cfg)
+        r = client.models.generate_content(model=route.model, contents=prompt, config=cfg)
         if not r or not r.text:
             print("  EMPTY response")
             continue

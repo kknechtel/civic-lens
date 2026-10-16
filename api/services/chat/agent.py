@@ -70,7 +70,7 @@ async def run(ctx: ChatContext):
                     answer += payload
                     yield sse("delta", {"content": payload, "session_id": ctx.session_id})
                 elif kind == "tool_start":
-                    yield sse("tool_use", {"name": payload})
+                    pass  # announced with its arguments as `tool_call` once the turn completes
                 elif kind == "final":
                     result = payload
             for k in usage:

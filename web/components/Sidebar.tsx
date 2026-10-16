@@ -131,7 +131,7 @@ export default function Sidebar() {
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{user.email}</p>
+              <Link href="/settings" className="block text-sm font-medium text-gray-900 truncate hover:underline" title="Settings & API keys">{user.email}</Link>
             </div>
           )}
           {user.is_admin && (

@@ -39,8 +39,8 @@ from typing import AsyncGenerator, Optional
 import anthropic
 from sqlalchemy.orm import Session
 
-from config import ANTHROPIC_API_KEY
 from database import SessionLocal
+from services.ai import model_for, pin
 from services.rag_search import search_chunks
 
 log = logging.getLogger(__name__)
@@ -531,30 +531,27 @@ async def stream_deck_chat(
     deep_thinking: bool = False,
     attachments: Optional[list[dict]] = None,
 ) -> AsyncGenerator[str, None]:
-    if not ANTHROPIC_API_KEY:
-        yield _sse("error", {"content": "ANTHROPIC_API_KEY not configured"})
+    route = await asyncio.to_thread(pin, "presentations", "anthropic", user_id)
+    if route is None:
+        yield _sse("error", {"content": "Deck chat needs an Anthropic key. Add your own API key in Settings."})
         return
 
-    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    client = anthropic.AsyncAnthropic(api_key=route.key)
     tools = _tool_defs()
     # Cache the tool defs — identical across the 6-iteration agentic loop.
     if tools:
         tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
 
-    # deep_thinking flips the model + adds adaptive thinking + effort=high.
-    # Adaptive thinking is the only supported on-mode on Opus 4.7; effort
-    # lives inside output_config, not at the top level.
+    # deep_thinking switches to the "deep" role's model (Admin → AI); otherwise
+    # the "chat" role's. No model-specific thinking/effort kwargs — the admin
+    # can route either role to any model.
     if deep_thinking:
-        model = "claude-opus-4-7"
-        extra_kwargs: dict = {
-            "thinking": {"type": "adaptive", "display": "summarized"},
-            "output_config": {"effort": "high"},
-        }
+        model = await asyncio.to_thread(model_for, "deep", "anthropic")
         max_tokens = 16000
     else:
-        model = "claude-sonnet-4-6"
-        extra_kwargs = {}
+        model = await asyncio.to_thread(model_for, "chat", "anthropic")
         max_tokens = 12000
+    extra_kwargs: dict = {}
 
     # Split into a stable block (cached every request) + a variable block
     # (cached per-deck — hits cache on follow-up turns about the same deck).
@@ -613,6 +610,7 @@ async def stream_deck_chat(
                 sess, source="deck_chat", model=model,
                 input_tokens=total_in, output_tokens=total_out,
                 user_id=user_id, resource_type="presentation", resource_id=presentation_id,
+                payer=route.payer, provider=route.provider,
             )
         finally:
             sess.close()

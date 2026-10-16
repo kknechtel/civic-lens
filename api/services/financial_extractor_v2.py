@@ -21,7 +21,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from config import GEMINI_API_KEY, ANTHROPIC_API_KEY
+from services.ai import model_for, pin
 
 logger = logging.getLogger(__name__)
 
@@ -328,7 +328,7 @@ Output ONLY the JSON object, no commentary or code fences.
 # ─── LLM helpers ─────────────────────────────────────────────────────────────
 
 
-def _record_extractor_usage(model: str, in_t: int, out_t: int) -> None:
+def _record_extractor_usage(route, in_t: int, out_t: int) -> None:
     """Best-effort usage record for batch financial extraction. user_id=None
     because these calls are typically batch jobs."""
     if not (in_t or out_t):
@@ -339,8 +339,9 @@ def _record_extractor_usage(model: str, in_t: int, out_t: int) -> None:
         sess = SessionLocal()
         try:
             record_usage(
-                sess, source="financial_extraction", model=model,
+                sess, source="financial_extraction", model=route.model,
                 input_tokens=in_t, output_tokens=out_t,
+                payer=route.payer, provider=route.provider,
             )
         finally:
             sess.close()
@@ -349,13 +350,14 @@ def _record_extractor_usage(model: str, in_t: int, out_t: int) -> None:
 
 
 async def _call_gemini(prompt: str, max_output: int = 65000) -> Optional[Dict]:
-    if not GEMINI_API_KEY:
+    route = pin("financial_extraction", "gemini")
+    if route is None:
         return None
     try:
         from google import genai
         from google.genai import types
 
-        client = genai.Client(api_key=GEMINI_API_KEY)
+        client = genai.Client(api_key=route.key)
         cfg_kwargs = dict(temperature=0.0, max_output_tokens=max_output)
         try:
             cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
@@ -366,7 +368,7 @@ async def _call_gemini(prompt: str, max_output: int = 65000) -> Optional[Dict]:
         response = await loop.run_in_executor(
             None,
             lambda: client.models.generate_content(
-                model="gemini-2.5-flash", contents=prompt, config=config,
+                model=route.model, contents=prompt, config=config,
             ),
         )
         if not response or not response.text:
@@ -374,7 +376,7 @@ async def _call_gemini(prompt: str, max_output: int = 65000) -> Optional[Dict]:
         usage = getattr(response, "usage_metadata", None)
         if usage is not None:
             _record_extractor_usage(
-                "gemini-2.5-flash",
+                route,
                 int(getattr(usage, "prompt_token_count", 0) or 0),
                 int(getattr(usage, "candidates_token_count", 0) or 0),
             )
@@ -385,17 +387,18 @@ async def _call_gemini(prompt: str, max_output: int = 65000) -> Optional[Dict]:
 
 
 async def _call_claude(prompt: str, max_output: int = 16000) -> Optional[Dict]:
-    if not ANTHROPIC_API_KEY:
+    route = pin("financial_extraction", "anthropic")
+    if route is None:
         return None
     try:
         import anthropic
-        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        client = anthropic.AsyncAnthropic(api_key=route.key)
         # Use streaming unconditionally — non-streaming .create() rejects
         # max_tokens above the 10-minute estimate threshold.
         text_parts: list[str] = []
         in_t = out_t = 0
         async with client.messages.stream(
-            model="claude-sonnet-4-6",
+            model=route.model,
             max_tokens=max_output,
             messages=[{"role": "user", "content": prompt}],
         ) as stream:
@@ -407,7 +410,7 @@ async def _call_claude(prompt: str, max_output: int = 16000) -> Optional[Dict]:
                 out_t = getattr(final.usage, "output_tokens", 0) or 0
             except Exception:
                 pass
-        _record_extractor_usage("claude-sonnet-4-6", in_t, out_t)
+        _record_extractor_usage(route, in_t, out_t)
         text = "".join(text_parts)
         if not text:
             return None
@@ -700,7 +703,7 @@ async def extract_financial_statement_v2(statement_id: str, s3_key: str):
             "line_item_count": order,
         }
         stmt.extraction_pass = 4
-        stmt.extraction_model = "gemini-2.5-flash+claude-sonnet-4-6"
+        stmt.extraction_model = f"{model_for('extract', 'gemini')}+{model_for('extract', 'anthropic')}"
         db.commit()
 
         # Pass 5: reconcile

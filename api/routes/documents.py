@@ -216,8 +216,9 @@ def _accessible_project_ids(db: Session, user: User) -> Optional[list[str]]:
     if user.is_admin:
         return None
     owned = [str(p.id) for p in db.query(Project.id).filter(Project.created_by == user.id).all()]
+    public = [str(p.id) for p in db.query(Project.id).filter(Project.is_public.is_(True)).all()]
     shared = shared_resource_ids(db, "projects", user.id)
-    return list({*owned, *shared})
+    return list({*owned, *public, *shared})
 
 
 def _gate_doc(db: Session, document_id: str, user: User, mode: str = "view") -> Document:
@@ -237,7 +238,8 @@ def _gate_doc(db: Session, document_id: str, user: User, mode: str = "view") -> 
         raise HTTPException(status_code=404, detail="Document not found")
     try:
         if mode == "view":
-            require_view(db, "projects", project.created_by, project.id, user)
+            if not project.is_public:
+                require_view(db, "projects", project.created_by, project.id, user)
         elif mode == "edit":
             require_edit(db, "projects", project.created_by, project.id, user)
         elif mode == "delete":

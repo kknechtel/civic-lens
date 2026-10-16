@@ -15,10 +15,12 @@ from typing import Optional
 import anthropic
 from sqlalchemy.orm import Session
 
-from config import ANTHROPIC_API_KEY
+from services.ai import pin
 from models.document import Document
 
 log = logging.getLogger(__name__)
+
+NO_KEY_MSG = "Fact-checking needs an Anthropic key. Add your own API key in Settings."
 
 CITATION_PATTERNS = [
     re.compile(r"\[source:\s*([^\]]+)\]", re.IGNORECASE),
@@ -56,7 +58,7 @@ def _fetch_doc(db: Session, kind: str, key: str) -> Optional[Document]:
     )
 
 
-def _check_one_claim(client: anthropic.Anthropic, claim: str, doc_text: str) -> tuple[dict, int, int]:
+def _check_one_claim(client: anthropic.Anthropic, model: str, claim: str, doc_text: str) -> tuple[dict, int, int]:
     """Returns (verdict_dict, input_tokens, output_tokens)."""
     prompt = (
         "You are fact-checking a single claim against a single source document.\n\n"
@@ -72,7 +74,7 @@ def _check_one_claim(client: anthropic.Anthropic, claim: str, doc_text: str) -> 
     in_t = out_t = 0
     try:
         resp = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=model,
             max_tokens=600,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -101,10 +103,11 @@ def fact_check_presentation(
     presentation_id: Optional[str] = None,
 ) -> dict:
     """Fact-check every citation in every narrative section."""
-    if not ANTHROPIC_API_KEY:
-        return {"error": "anthropic_api_key_not_configured"}
+    route = pin("integrity_review", "anthropic", user_id)
+    if route is None:
+        return {"error": NO_KEY_MSG}
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=route.key)
     results: list[dict] = []
     summary = {"supported": 0, "partial": 0, "unsupported": 0, "unresolved": 0, "no_source": 0}
     total_in = total_out = 0
@@ -128,7 +131,7 @@ def fact_check_presentation(
                 })
                 continue
 
-            verdict, in_t, out_t = _check_one_claim(client, body[:1500], doc.extracted_text)
+            verdict, in_t, out_t = _check_one_claim(client, route.model, body[:1500], doc.extracted_text)
             total_in += in_t
             total_out += out_t
             claims_checked += 1
@@ -148,11 +151,12 @@ def fact_check_presentation(
         try:
             from services.usage import record_usage
             record_usage(
-                db, source="fact_check", model="claude-sonnet-4-6",
+                db, source="fact_check", model=route.model,
                 input_tokens=total_in, output_tokens=total_out,
                 user_id=user_id,
                 resource_type="presentation", resource_id=presentation_id,
                 metadata={"claims_checked": claims_checked},
+                payer=route.payer, provider=route.provider,
             )
         except Exception:
             log.warning("fact_check usage record skipped", exc_info=True)
@@ -181,8 +185,9 @@ def fact_check_presentation_stream(
         {"type": "complete", "ran_at": str, "summary": dict, "results": [...]}
         {"type": "error", "message": str}         (on failure)
     """
-    if not ANTHROPIC_API_KEY:
-        yield {"type": "error", "message": "anthropic_api_key_not_configured"}
+    route = pin("integrity_review", "anthropic", user_id)
+    if route is None:
+        yield {"type": "error", "message": NO_KEY_MSG}
         return
 
     # Pre-count citations so the UI can show "X of Y checked" progress.
@@ -195,7 +200,7 @@ def fact_check_presentation_stream(
             total += 1
     yield {"type": "start", "total": total}
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=route.key)
     results: list[dict] = []
     summary = {"supported": 0, "partial": 0, "unsupported": 0, "unresolved": 0, "no_source": 0}
     total_in = total_out = 0
@@ -222,7 +227,7 @@ def fact_check_presentation_stream(
                 yield {"type": "verdict", "verdict": rec}
                 continue
 
-            verdict, in_t, out_t = _check_one_claim(client, body[:1500], doc.extracted_text)
+            verdict, in_t, out_t = _check_one_claim(client, route.model, body[:1500], doc.extracted_text)
             total_in += in_t
             total_out += out_t
             claims_checked += 1
@@ -244,11 +249,12 @@ def fact_check_presentation_stream(
         try:
             from services.usage import record_usage
             record_usage(
-                db, source="fact_check", model="claude-sonnet-4-6",
+                db, source="fact_check", model=route.model,
                 input_tokens=total_in, output_tokens=total_out,
                 user_id=user_id,
                 resource_type="presentation", resource_id=presentation_id,
                 metadata={"claims_checked": claims_checked},
+                payer=route.payer, provider=route.provider,
             )
         except Exception:
             log.warning("fact_check usage record skipped", exc_info=True)

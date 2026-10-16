@@ -22,6 +22,7 @@ import {
     XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import type { FactCheckResultItem } from './MarkdownRenderer';
+import { citationOrder, CitationSourcesList, type CitationSources } from './citations';
 
 // Lazy: MarkdownRenderer pulls marked + highlight.js + DOMPurify (heavy).
 // Loading dynamically keeps the deck shell light.
@@ -236,10 +237,18 @@ interface Props {
     /** Forwarded — when set, citation pills get verdict badges. */
     factCheckResults?: FactCheckResultItem[];
     brandColor?: string;
+    /** Grounded, numbered citations with one Sources list for the whole answer. */
+    sources?: CitationSources;
+    numberedCitations?: boolean;
 }
 
-export default function MarkdownWithCharts({ content, onCitationClick, factCheckResults, brandColor }: Props) {
+export default function MarkdownWithCharts({ content, onCitationClick, factCheckResults, brandColor, sources, numberedCitations }: Props) {
     const segments = useMemo(() => splitOnChartFences(content || ''), [content]);
+    const order = useMemo(() => citationOrder(content || ''), [content]);
+    const open = (filename: string) => {
+        if (onCitationClick) onCitationClick({ filename });
+        else window.dispatchEvent(new CustomEvent('ah:open-citation', { detail: { kind: 'doc', filename } }));
+    };
 
     return (
         <>
@@ -261,9 +270,17 @@ export default function MarkdownWithCharts({ content, onCitationClick, factCheck
                         onCitationClick={onCitationClick}
                         factCheckResults={factCheckResults}
                         brandColor={brandColor}
+                        sources={sources}
+                        numberedCitations={numberedCitations}
+                        citeOrderOverride={order}
+                        showSources={false}
                     />
                     : null;
             })}
+            {numberedCitations && (
+                <CitationSourcesList order={order} content={content || ''} sources={sources}
+                                     brandColor={brandColor || '#385854'} onOpen={open} />
+            )}
         </>
     );
 }

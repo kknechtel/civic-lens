@@ -37,7 +37,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
-from config import ANTHROPIC_API_KEY, GEMINI_API_KEY
+from services.ai import pin
 
 logger = logging.getLogger(__name__)
 
@@ -417,7 +417,7 @@ async def _call_llm(prompt: str, max_output: int = 16000, label: str = "drill") 
     last_error: Optional[str] = None
     raw_response: Optional[str] = None
 
-    def _record(model: str, in_t: int, out_t: int) -> None:
+    def _record(route, in_t: int, out_t: int) -> None:
         if not (in_t or out_t):
             return
         try:
@@ -426,26 +426,28 @@ async def _call_llm(prompt: str, max_output: int = 16000, label: str = "drill") 
             sess = SessionLocal()
             try:
                 record_usage(
-                    sess, source="financial_agent", model=model,
+                    sess, source="financial_agent", model=route.model,
                     input_tokens=in_t, output_tokens=out_t,
                     metadata={"label": label},
+                    payer=route.payer, provider=route.provider,
                 )
             finally:
                 sess.close()
         except Exception:
             logger.debug("financial_agent usage record skipped", exc_info=True)
 
-    if ANTHROPIC_API_KEY:
+    claude = pin("financial_extraction", "anthropic")
+    if claude:
         try:
             import anthropic
-            client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+            client = anthropic.AsyncAnthropic(api_key=claude.key)
             # Anthropic SDK requires .stream() for ANY request with max_tokens that
             # could plausibly take >10 min. Use streaming unconditionally so we don't
             # need to guess the threshold.
             text_parts: list[str] = []
             in_t = out_t = 0
             async with client.messages.stream(
-                model="claude-sonnet-4-6",
+                model=claude.model,
                 max_tokens=max_output,
                 messages=[{"role": "user", "content": prompt}],
             ) as stream:
@@ -457,7 +459,7 @@ async def _call_llm(prompt: str, max_output: int = 16000, label: str = "drill") 
                     out_t = getattr(final.usage, "output_tokens", 0) or 0
                 except Exception:
                     pass
-            _record("claude-sonnet-4-6", in_t, out_t)
+            _record(claude, in_t, out_t)
             raw_response = "".join(text_parts)
             if raw_response:
                 parsed = _parse_json(raw_response)
@@ -472,11 +474,12 @@ async def _call_llm(prompt: str, max_output: int = 16000, label: str = "drill") 
             last_error = f"claude_api_error: {type(exc).__name__}: {exc}"
             logger.warning("[%s] %s", label, last_error)
 
-    if GEMINI_API_KEY:
+    gemini = pin("financial_extraction", "gemini")
+    if gemini:
         try:
             from google import genai
             from google.genai import types
-            client = genai.Client(api_key=GEMINI_API_KEY)
+            client = genai.Client(api_key=gemini.key)
             # ThinkingConfig.thinking_budget is rejected by older SDK versions on
             # the deployed EC2. Build the config without it and try setting it
             # only if the SDK accepts. (We don't actually need thinking for these
@@ -490,13 +493,13 @@ async def _call_llm(prompt: str, max_output: int = 16000, label: str = "drill") 
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: client.models.generate_content(model="gemini-2.5-flash", contents=prompt, config=cfg),
+                lambda: client.models.generate_content(model=gemini.model, contents=prompt, config=cfg),
             )
             if response:
                 usage = getattr(response, "usage_metadata", None)
                 if usage is not None:
                     _record(
-                        "gemini-2.5-flash",
+                        gemini,
                         int(getattr(usage, "prompt_token_count", 0) or 0),
                         int(getattr(usage, "candidates_token_count", 0) or 0),
                     )
@@ -917,8 +920,8 @@ async def run_full_drill(statement_id: str) -> Dict[str, Any]:
         "success_count": success_count,
         "error_count": error_count,
         "synthesis_ok": "error" not in synthesis,
-        "llm_models_attempted": [m for m, k in [("claude-sonnet-4-6", ANTHROPIC_API_KEY),
-                                                 ("gemini-2.5-flash", GEMINI_API_KEY)] if k],
+        "llm_models_attempted": [r.model for r in (pin("financial_extraction", "anthropic"),
+                                                   pin("financial_extraction", "gemini")) if r],
     }
 
     # Persist regardless of success — caller needs to see errors.

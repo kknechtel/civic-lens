@@ -90,6 +90,7 @@ export default function AdminPage() {
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+        <a href="/admin/ai" className="mt-1 inline-block text-sm underline" style={{ color: brandColor }}>AI providers, keys &amp; spending →</a>
         <div className="flex gap-1 border border-gray-200 rounded-lg p-0.5 bg-white">
           {(["users", "documents", "costs"] as const).map((t) => (
             <button

@@ -2,6 +2,9 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'isomorphic-dompurify';
+import { citationOrder, CitationSourcesList, prettyDocName, type CitationSources } from './citations';
+
+export type { CitationSources };
 
 export type FactCheckVerdict = 'supported' | 'partial' | 'unsupported' | 'unresolved' | 'no_source';
 
@@ -17,6 +20,13 @@ export interface FactCheckResultItem {
 
 interface MarkdownRendererProps {
     content: string;
+    /** Numbered citations [1] with a Sources list; verified/unverified from grounding. */
+    sources?: CitationSources;
+    numberedCitations?: boolean;
+    /** Shared numbering when one answer is split into several segments (charts). */
+    citeOrderOverride?: string[];
+    /** Render the Sources list under this segment (default true). */
+    showSources?: boolean;
     /** Called when the user clicks a `[source: filename.pdf]` pill. */
     onCitationClick?: (info: { filename: string }) => void;
     /** When provided, citation pills get a verdict badge (✓/!/✗/?). */
@@ -49,8 +59,20 @@ const VERDICT_BADGE: Record<FactCheckVerdict, { glyph: string; cls: string; titl
  * the source documents.
  */
 const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
-    content, onCitationClick, factCheckResults, brandColor = '#385854',
+    content, onCitationClick, factCheckResults, brandColor = '#385854', sources, numberedCitations = false,
+    citeOrderOverride, showSources = true,
 }) => {
+    // Order of first citation → number; title lookup from grounding.
+    const ownOrder = useMemo(() => citationOrder(content), [content]);
+    const citeOrder = citeOrderOverride || ownOrder;
+    const citeMeta = useMemo(() => {
+        const byName = new Map<string, { title?: string | null; date?: string | null; verified: boolean }>();
+        for (const v of sources?.verified || []) byName.set(v.filename.toLowerCase(), { title: v.title, date: v.date, verified: true });
+        const unverified = new Set((sources?.unverified || []).map(u => u.toLowerCase()));
+        return { byName, unverified };
+    }, [sources]);
+    const isUnverified = (fn: string, explicit: boolean) =>
+        explicit || citeMeta.unverified.has(fn.toLowerCase());
     const containerRef = useRef<HTMLDivElement>(null);
     const [html, setHtml] = useState<string>('');
 
@@ -98,16 +120,21 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                 // Comma / pipe / semicolon split inside one pair of brackets so
                 // `[source: a.pdf | b.pdf]` becomes two pills.
                 const withCitations = unescaped.replace(
-                    /\[source:\s*([^\]]+)\]/g,
-                    (_match, filenamesGroup: string) => {
+                    /\[(unverified )?source:\s*([^\]]+)\]/g,
+                    (_match, unv: string | undefined, filenamesGroup: string) => {
                         const filenames = filenamesGroup
                             .split(/\s*[,|;]\s*|\s+\|\s+/)
                             .map(s => s.trim())
                             .filter(Boolean);
                         if (!filenames.length) return _match;
                         return filenames
-                            .map(fn => `[📄 ${fn}](ah://cite/${encodeURIComponent(fn)})`)
-                            .join(' ');
+                            .map(fn => {
+                                const href = `ah://cite/${encodeURIComponent(fn)}${isUnverified(fn, !!unv) ? '?unverified=1' : ''}`;
+                                if (!numberedCitations) return `[📄 ${fn}](${href})`;
+                                const n = citeOrder.indexOf(fn) + 1;
+                                return `[${isUnverified(fn, !!unv) ? '?' : n}](${href})`;
+                            })
+                            .join('');
                     },
                 );
 
@@ -126,7 +153,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
         render();
         return () => { isMounted = false; };
-    }, [content]);
+    }, [content, numberedCitations, citeOrder, citeMeta]);
 
     // Decorate citation pills (style + optional verdict badge). Runs after
     // every html / verdictMap change. Idempotent — strips prior decoration
@@ -140,6 +167,30 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
             const next = a.nextElementSibling;
             if (next && next.classList.contains('ah-fc-badge')) {
                 next.remove();
+            }
+            const unverified = a.getAttribute('href')!.includes('?unverified=1');
+            const fnRaw = decodeURIComponent(a.getAttribute('href')!.replace(/^ah:\/\/cite\//, '').replace(/\?unverified=1$/, ''));
+            if (numberedCitations) {
+                const info = citeMeta.byName.get(fnRaw.toLowerCase());
+                a.title = unverified
+                    ? `Not verified — the assistant cited “${prettyDocName(fnRaw)}”, which its searches didn't return.`
+                    : `${info?.title || prettyDocName(fnRaw)}${info?.date ? ` · ${info.date}` : ''}`;
+                a.style.display = 'inline-block';
+                a.style.minWidth = '1.15rem';
+                a.style.padding = '0 4px';
+                a.style.margin = '0 1px';
+                a.style.borderRadius = '4px';
+                a.style.fontSize = '0.68rem';
+                a.style.lineHeight = '1.1rem';
+                a.style.fontWeight = '600';
+                a.style.textAlign = 'center';
+                a.style.verticalAlign = 'super';
+                a.style.textDecoration = 'none';
+                a.style.cursor = unverified ? 'help' : 'pointer';
+                a.style.background = unverified ? '#fef3c7' : `${brandColor}14`;
+                a.style.color = unverified ? '#92400e' : brandColor;
+                a.style.border = `1px solid ${unverified ? '#fcd34d' : `${brandColor}33`}`;
+                return;
             }
             // Pill styling — kept inline so it survives without the prose CSS.
             a.style.display = 'inline-flex';
@@ -169,7 +220,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
             badge.title = meta.title;
             a.insertAdjacentElement('afterend', badge);
         });
-    }, [html, verdictMap, brandColor]);
+    }, [html, verdictMap, brandColor, numberedCitations, citeMeta]);
 
     const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
         // closest('a') so clicks on inner content (emoji, badge) still
@@ -178,10 +229,11 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         if (!a) return;
         const href = a.getAttribute('href') || '';
 
-        const m = href.match(/^ah:\/\/cite\/(.+)$/);
+        const m = href.match(/^ah:\/\/cite\/(.+?)(\?unverified=1)?$/);
         if (m) {
             e.preventDefault();
             e.stopPropagation();
+            if (m[2]) return; // unverified: nothing real to open
             const filename = decodeURIComponent(m[1]).trim();
             if (onCitationClick) {
                 onCitationClick({ filename });
@@ -207,13 +259,24 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         }
     };
 
+    const open = (filename: string) => {
+        if (onCitationClick) onCitationClick({ filename });
+        else window.dispatchEvent(new CustomEvent('ah:open-citation', { detail: { kind: 'doc', filename } }));
+    };
+
     return (
-        <div
-            ref={containerRef}
-            onClick={handleClick}
-            className="markdown-body prose prose-sm max-w-none overflow-x-auto"
-            dangerouslySetInnerHTML={{ __html: html }}
-        />
+        <div>
+            <div
+                ref={containerRef}
+                onClick={handleClick}
+                className="markdown-body prose prose-sm max-w-none overflow-x-auto"
+                dangerouslySetInnerHTML={{ __html: html }}
+            />
+            {numberedCitations && showSources && (
+                <CitationSourcesList order={citeOrder} content={content} sources={sources}
+                                     brandColor={brandColor} onOpen={open} />
+            )}
+        </div>
     );
 };
 

@@ -729,10 +729,25 @@ export default function GlobalChat() {
               });
               break;
 
+            case "citations":
+              patchMessage(assistantMsg.id, {
+                citations: { verified: d.verified || [], unverified: d.unverified || [] },
+              });
+              break;
+
+            case "needs_key":
+              patchMessage(assistantMsg.id, {
+                needsKey: { reason: d.reason, settingsUrl: d.settings_url },
+                isStreaming: false,
+                statusText: undefined,
+              });
+              break;
+
             case "done":
               patchMessage(assistantMsg.id, m => ({
                 isStreaming: false,
                 statusText: undefined,
+                servedBy: { model: d.model, provider: d.provider, paidBy: d.paid_by },
                 cost: {
                   input_tokens: d.input_tokens,
                   output_tokens: d.output_tokens,
@@ -749,6 +764,7 @@ export default function GlobalChat() {
               break;
 
             case "error":
+              if (d.code === "needs_key") break; // already shown as a needs_key card
               patchMessage(assistantMsg.id, m => ({
                 content: (m.content || "") + (m.content ? "\n\n" : "") + "Error: " + (d.content || "Unknown error"),
                 isStreaming: false,
@@ -871,12 +887,12 @@ export default function GlobalChat() {
               : <CpuChipIcon className="w-5 h-5 opacity-90 flex-shrink-0" />}
             <div className="min-w-0">
               <div className="font-bold text-sm leading-tight">
-                {activeDeck ? 'Presentation mode' : 'AI Analyst'}
+                {activeDeck ? 'Presentation mode' : 'Ask the records'}
               </div>
               <div className="text-[10px] opacity-75 leading-tight truncate">
                 {activeDeck
                   ? `Revising · ${activeDeck.title}`
-                  : `Connected · Documents${webSearchEnabled ? " + Web" : ""}${deepThinking ? " + Deep" : ""}${reportMode ? " + Report" : ""}`}
+                  : `${municipality.short_name || "Public"} records${webSearchEnabled ? " + web" : ""}${deepThinking ? " · thorough" : ""} · answers cite sources`}
               </div>
             </div>
           </div>
@@ -892,7 +908,7 @@ export default function GlobalChat() {
                 className="flex items-center gap-1 px-2 py-1 text-xs bg-white/20 rounded hover:bg-white/30 disabled:opacity-50 transition"
               >
                 <DocumentChartBarIcon className="w-3.5 h-3.5" />
-                <span>{convertingDeck ? "Building…" : "Presentation"}</span>
+                {convertingDeck && <span>Building…</span>}
               </button>
             )}
             {!isMobile && (
@@ -997,7 +1013,7 @@ export default function GlobalChat() {
             <input type="checkbox" checked={deepThinking} onChange={e => setDeepThinking(e.target.checked)}
               className="cursor-pointer" style={{ accentColor: brandColor, width: 13, height: 13 }} />
             <LightBulbIcon className="w-3 h-3" />
-            Deep
+            <span title="Slower, more careful model — costs more">Thorough</span>
           </label>
           <label
             className={`flex items-center gap-1.5 cursor-pointer ${webSearchEnabled ? "font-semibold" : "text-gray-500"}`}
@@ -1006,7 +1022,7 @@ export default function GlobalChat() {
             <input type="checkbox" checked={webSearchEnabled} onChange={e => setWebSearchEnabled(e.target.checked)}
               className="cursor-pointer" style={{ accentColor: brandColor, width: 13, height: 13 }} />
             <GlobeAltIcon className="w-3 h-3" />
-            Web
+            <span title="Also search the public web (news, state sites)">Include web</span>
           </label>
           <div className="flex-1" />
           <div className="relative">
@@ -1119,6 +1135,28 @@ export default function GlobalChat() {
             user can't reach the messages they want. `touch-pan-y` keeps
             vertical-pan gestures owned by this scrollport. */}
         <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y px-4 py-3 min-h-0">
+          {messages.length === 0 && !activeDeck && (
+            <div className="mx-auto max-w-md pt-6 text-center">
+              <div className="text-base font-semibold text-gray-800">
+                Ask about {municipality.name || "the public record"}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Answers come from council resolutions, minutes, budgets and audits, with a numbered source for every fact.
+              </p>
+              <div className="mt-4 grid gap-2 text-left">
+                {(municipality.suggested_questions?.length ? municipality.suggested_questions : [
+                  "What did the council approve at its last meeting?",
+                  "Which contracts were awarded without bidding?",
+                  "How has the budget changed over the last three years?",
+                ]).slice(0, 4).map(q => (
+                  <button key={q} type="button" onClick={() => setInput(q)}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 hover:border-gray-300 hover:bg-gray-50">
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {messages.map(msg => (
             <EnhancedMessageComponent
               key={msg.id}
@@ -1406,7 +1444,6 @@ function CopyChatButton({ messages }: { messages: ChatMessage[] }) {
       className="flex items-center gap-1 px-2 py-1 text-xs bg-white/20 rounded hover:bg-white/30 transition"
     >
       {copied ? <CheckIcon className="w-3.5 h-3.5" /> : <ClipboardDocumentIcon className="w-3.5 h-3.5" />}
-      <span>{copied ? "Copied" : "Copy Chat"}</span>
     </button>
   );
 }

@@ -34,6 +34,7 @@ export interface Municipality {
   features: { financial: boolean; meetings: boolean; events: boolean; presentations: boolean; contracts: boolean; alerts: boolean; integrity: boolean };
   entities: MunicipalityEntity[];
   records_law: { name: string; short: string; citation: string } | null;
+  suggested_questions?: string[];
 }
 
 // Shown for the instant before the profile loads (and if the API is down) —

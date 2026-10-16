@@ -77,10 +77,10 @@ def list_projects(db: Session = Depends(get_db), user: User = Depends(get_curren
     q = db.query(Project)
     if not user.is_admin:
         shared_ids = shared_resource_ids(db, "projects", user.id)
+        visible = [Project.created_by == user.id, Project.is_public.is_(True)]
         if shared_ids:
-            q = q.filter(or_(Project.created_by == user.id, Project.id.in_(shared_ids)))
-        else:
-            q = q.filter(Project.created_by == user.id)
+            visible.append(Project.id.in_(shared_ids))
+        q = q.filter(or_(*visible))
     projects = q.all()
     # Batch-fetch share roles for the non-owned projects
     role_by_id: dict[str, str] = {}
@@ -116,7 +116,8 @@ def get_project(project_id: UUID, db: Session = Depends(get_db), user: User = De
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    require_view(db, "projects", project.created_by, project.id, user)
+    if not project.is_public:
+        require_view(db, "projects", project.created_by, project.id, user)
     role = user_share_role(db, "projects", project.id, user.id)
     return _serialize(project, user, role)
 

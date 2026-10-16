@@ -12,13 +12,11 @@ from typing import Optional
 
 import anthropic
 
-from config import ANTHROPIC_API_KEY
+from services.ai import pin
 
 logger = logging.getLogger(__name__)
 
-# Sonnet 4.6 is the default for chat in this app; reuse it for summaries so
-# we don't fan out across models.
-MODEL = "claude-sonnet-4-6"
+# Model comes from the "meeting_summaries" feature's role (Admin → AI).
 
 
 def _system_prompt() -> str:
@@ -79,8 +77,9 @@ def summarize_meeting(
     raw_text: Optional[str] = None,
 ) -> dict:
     """Returns a dict matching the SYSTEM_PROMPT schema. Caller persists it."""
-    if not ANTHROPIC_API_KEY:
-        raise RuntimeError("ANTHROPIC_API_KEY not configured")
+    route = pin("meeting_summaries", "anthropic")
+    if route is None:
+        raise RuntimeError("No anthropic key configured (Admin → AI)")
 
     if segments:
         transcript_block = _segments_to_prompt(segments)
@@ -90,9 +89,9 @@ def summarize_meeting(
     header = f"Meeting body: {meeting_body}\nMeeting date: {meeting_date or 'unknown'}"
     user_msg = f"{header}\n\n--- Transcript ---\n{transcript_block}"
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=route.key)
     resp = client.messages.create(
-        model=MODEL,
+        model=route.model,
         max_tokens=4096,
         system=_system_prompt(),
         messages=[{"role": "user", "content": user_msg}],

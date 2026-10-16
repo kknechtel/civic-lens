@@ -179,6 +179,7 @@ def _migrate():
         # canonical identifier; title is the display string.
         ("documents", "title", "VARCHAR"),
         ("integrity_awards", "details", "JSONB DEFAULT '{}'::jsonb"),
+        ("projects", "is_public", "BOOLEAN NOT NULL DEFAULT FALSE"),
         # Who paid for each AI call (user's own key vs the deployment) — caps.
         ("llm_usage", "payer", "VARCHAR DEFAULT 'deployment'"),
         ("llm_usage", "provider", "VARCHAR"),
@@ -456,6 +457,35 @@ def _migrate():
                 """))
             except Exception as e:
                 logger.warning(f"calendar_events event_type backfill skipped: {e}")
+
+        # 4a'. The scraped corpus is public record: make its project public
+        # (it used to be visible to admins only, so residents saw an empty library).
+        try:
+            with conn.begin_nested():
+                conn.execute(text("UPDATE projects SET is_public = TRUE "
+                                  "WHERE is_public = FALSE AND name LIKE '%Scraped Documents'"))
+        except Exception as e:
+            logger.warning(f"public-project backfill skipped: {e}")
+
+        # 4b. chat_history predates the ORM models and was never created by
+        # create_all, so fresh installs had no table and chat failed on its
+        # first INSERT. Create it here (matches production's columns).
+        try:
+            with conn.begin_nested():
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS chat_history (
+                        id UUID PRIMARY KEY,
+                        session_id VARCHAR NOT NULL,
+                        scope_type VARCHAR DEFAULT 'all',
+                        scope_id VARCHAR,
+                        role VARCHAR NOT NULL,
+                        content TEXT,
+                        user_id UUID REFERENCES users(id),
+                        created_at TIMESTAMP DEFAULT now()
+                    )"""))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_chat_history_session ON chat_history (session_id, created_at)"))
+        except Exception as e:
+            logger.warning(f"chat_history create skipped: {e}")
 
         # 5. Per-user scoping: add user_id to chat_history so each user only sees
         # their own sessions. Existing rows (pre-migration) get NULL — they're

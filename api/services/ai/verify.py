@@ -1,6 +1,8 @@
 """Check an API key with a cheap, read-only call to its provider."""
 from __future__ import annotations
 
+import os
+
 import requests
 
 _TIMEOUT = 15
@@ -9,13 +11,15 @@ _TIMEOUT = 15
 def verify(provider: str, key: str) -> tuple[bool, str]:
     try:
         if provider == "anthropic":
-            r = requests.get("https://api.anthropic.com/v1/models", timeout=_TIMEOUT,
+            base = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com").rstrip("/")
+            r = requests.get(f"{base}/v1/models", timeout=_TIMEOUT,
                              headers={"x-api-key": key, "anthropic-version": "2023-06-01"})
         elif provider == "gemini":
             r = requests.get("https://generativelanguage.googleapis.com/v1beta/models", timeout=_TIMEOUT,
                              params={"key": key, "pageSize": 1})
         elif provider == "openai":
-            r = requests.get("https://api.openai.com/v1/models", timeout=_TIMEOUT,
+            base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+            r = requests.get(f"{base}/models", timeout=_TIMEOUT,
                              headers={"Authorization": f"Bearer {key}"})
         elif provider == "voyage":
             r = requests.post("https://api.voyageai.com/v1/embeddings", timeout=_TIMEOUT,

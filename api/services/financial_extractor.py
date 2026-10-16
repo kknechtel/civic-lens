@@ -7,7 +7,7 @@ import json
 import asyncio
 from typing import Dict, List, Optional
 
-from config import GEMINI_API_KEY, ANTHROPIC_API_KEY
+from services.ai import pin
 
 logger = logging.getLogger(__name__)
 
@@ -156,23 +156,25 @@ async def pdf_to_markdown(content: bytes) -> Optional[str]:
 async def call_extraction_llm(prompt: str) -> Optional[Dict]:
     """Call Gemini or Claude to extract structured financial data."""
     # Try Gemini first
-    if GEMINI_API_KEY:
+    gemini = pin("financial_extraction", "gemini")
+    if gemini:
         try:
-            return await _call_gemini(prompt)
+            return await _call_gemini(prompt, gemini)
         except Exception as e:
             logger.warning(f"Gemini extraction failed, falling back to Claude: {e}")
 
     # Fallback to Claude
-    if ANTHROPIC_API_KEY:
+    claude = pin("financial_extraction", "anthropic")
+    if claude:
         try:
-            return await _call_claude(prompt)
+            return await _call_claude(prompt, claude)
         except Exception as e:
             logger.error(f"Claude extraction also failed: {e}")
 
     return None
 
 
-def _record_v1_usage(model: str, in_t: int, out_t: int) -> None:
+def _record_v1_usage(route, in_t: int, out_t: int) -> None:
     if not (in_t or out_t):
         return
     try:
@@ -181,8 +183,9 @@ def _record_v1_usage(model: str, in_t: int, out_t: int) -> None:
         sess = SessionLocal()
         try:
             record_usage(
-                sess, source="financial_extraction", model=model,
+                sess, source="financial_extraction", model=route.model,
                 input_tokens=in_t, output_tokens=out_t,
+                payer=route.payer, provider=route.provider,
             )
         finally:
             sess.close()
@@ -190,12 +193,12 @@ def _record_v1_usage(model: str, in_t: int, out_t: int) -> None:
         pass
 
 
-async def _call_gemini(prompt: str) -> Optional[Dict]:
-    """Extract using Gemini 2.5 Flash."""
+async def _call_gemini(prompt: str, route) -> Optional[Dict]:
+    """Extract using Gemini (model from the "extract" role)."""
     from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=route.key)
     config = types.GenerateContentConfig(
         temperature=0.1,
         max_output_tokens=65000,
@@ -206,7 +209,7 @@ async def _call_gemini(prompt: str) -> Optional[Dict]:
     response = await loop.run_in_executor(
         None,
         lambda: client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=route.model,
             contents=prompt,
             config=config,
         ),
@@ -218,7 +221,7 @@ async def _call_gemini(prompt: str) -> Optional[Dict]:
     usage = getattr(response, "usage_metadata", None)
     if usage is not None:
         _record_v1_usage(
-            "gemini-2.5-flash",
+            route,
             int(getattr(usage, "prompt_token_count", 0) or 0),
             int(getattr(usage, "candidates_token_count", 0) or 0),
         )
@@ -226,17 +229,17 @@ async def _call_gemini(prompt: str) -> Optional[Dict]:
     return _parse_json_response(response.text)
 
 
-async def _call_claude(prompt: str) -> Optional[Dict]:
+async def _call_claude(prompt: str, route) -> Optional[Dict]:
     """Extract using Claude."""
     import anthropic
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=route.key)
 
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(
         None,
         lambda: client.messages.create(
-            model="claude-sonnet-4-6",
+            model=route.model,
             max_tokens=8192,
             messages=[{"role": "user", "content": prompt}],
         ),
@@ -246,7 +249,7 @@ async def _call_claude(prompt: str) -> Optional[Dict]:
         return None
 
     _record_v1_usage(
-        "claude-sonnet-4-6",
+        route,
         getattr(response.usage, "input_tokens", 0) or 0,
         getattr(response.usage, "output_tokens", 0) or 0,
     )

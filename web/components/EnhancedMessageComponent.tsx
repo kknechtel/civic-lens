@@ -15,6 +15,7 @@ import {
     DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import MarkdownWithCharts from './MarkdownWithCharts';
+import type { CitationSources } from './citations';
 import TypingIndicator from './TypingIndicator';
 import { useAuth } from '@/app/contexts/AuthContext';
 
@@ -71,6 +72,12 @@ export interface ChatMessage {
     continuations?: number;
     /** Deck-mode proposals from Claude (when chat is bound to an active presentation). */
     proposals?: DeckProposalLite[];
+    /** Citation grounding from the `citations` event: which cited docs the tools actually returned. */
+    citations?: CitationSources;
+    /** Set when no API key can pay for this feature (`needs_key` event). */
+    needsKey?: { reason: string; settingsUrl?: string };
+    /** Which model answered and who paid (from `done`). */
+    servedBy?: { model?: string; provider?: string; paidBy?: string };
 }
 
 interface EnhancedMessageComponentProps {
@@ -129,6 +136,25 @@ function ToolActivityList({ items, brandColor }: { items: ToolActivity[]; brandC
             ))}
         </div>
     );
+}
+
+function summarizeActivity(items: ToolActivity[]): string {
+    const counts = new Map<string, number>();
+    for (const t of items) counts.set(t.name, (counts.get(t.name) || 0) + 1);
+    const label: Record<string, string> = {
+        search_chunks: 'Searched', search_documents: 'Looked up documents', read_document: 'Read',
+        search_awards: 'Checked spending records', get_integrity_flags: 'Checked red flags',
+        get_financial_summary: 'Checked financials', web_search: 'Searched the web',
+    };
+    const parts = Array.from(counts.entries()).map(([n, c]) => `${label[n] || n.replace(/_/g, ' ')}${c > 1 ? ` ${c}×` : ''}`);
+    return parts.join(' · ');
+}
+
+/** "claude-haiku-5-5" → "Claude Haiku 5.5", "gemini-2.5-flash" → "Gemini 2.5 Flash" */
+function prettyModel(id: string): string {
+    const m = id.match(/^claude-(\w+)-(\d+)-(\d+)/);
+    if (m) return `Claude ${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}`;
+    return id.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
 }
 
 function StatusIndicator({ text, brandColor }: { text: string; brandColor: string }) {
@@ -427,6 +453,23 @@ const EnhancedMessageComponent: React.FC<EnhancedMessageComponentProps> = ({
         );
     }
 
+    if (message.needsKey) {
+        return (
+            <div className={`flex justify-start mb-4 transition-all duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+                <div className="max-w-[90%] rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <div className="font-semibold mb-0.5">AI answers need an API key</div>
+                    <div className="text-amber-800">{message.needsKey.reason}</div>
+                    <a href={message.needsKey.settingsUrl || '/settings'}
+                       className="mt-2 inline-block rounded-md px-3 py-1.5 text-xs font-medium text-white"
+                       style={{ backgroundColor: brandColor }}>
+                        Add a key in Settings
+                    </a>
+                    <div className="mt-2 text-xs text-amber-700">Search and the document library work without one.</div>
+                </div>
+            </div>
+        );
+    }
+
     if (message.role === 'error') {
         return (
             <div className={`flex justify-center mb-3 transition-all duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
@@ -445,7 +488,7 @@ const EnhancedMessageComponent: React.FC<EnhancedMessageComponentProps> = ({
             ref={messageRef}
             className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 transition-all duration-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
         >
-            <div className={`flex items-end gap-2.5 ${isUser ? 'flex-row-reverse' : ''} max-w-[85%]`}>
+            <div className={`flex items-end gap-2.5 ${isUser ? 'flex-row-reverse max-w-[85%]' : 'w-full max-w-[96%]'}`}>
                 <div
                     className="w-7 h-7 rounded-full flex items-center justify-center text-white flex-shrink-0 shadow"
                     style={{ backgroundColor: brandColor }}
@@ -453,10 +496,10 @@ const EnhancedMessageComponent: React.FC<EnhancedMessageComponentProps> = ({
                     {isUser ? <UserIcon className="w-3.5 h-3.5" /> : <CpuChipIcon className="w-3.5 h-3.5" />}
                 </div>
 
-                <div className={`group relative rounded-2xl px-4 py-3 text-sm shadow-lg ${
+                <div className={`group relative rounded-2xl px-4 py-3 text-sm ${
                     isUser
-                        ? 'text-white rounded-br-md'
-                        : 'bg-white text-gray-800 border border-gray-200 rounded-bl-md'
+                        ? 'text-white rounded-br-md shadow-sm'
+                        : 'min-w-0 flex-1 bg-white text-gray-800 border border-gray-200 rounded-bl-md shadow-sm'
                 }`} style={isUser ? { backgroundColor: brandColor } : {}}>
 
                     {!isUser && message.thinking && <ThinkingIndicator status={message.thinking} brandColor={brandColor} />}
@@ -468,7 +511,16 @@ const EnhancedMessageComponent: React.FC<EnhancedMessageComponentProps> = ({
                     )}
 
                     {!isUser && message.toolActivity && message.toolActivity.length > 0 && (
-                        <ToolActivityList items={message.toolActivity} brandColor={brandColor} />
+                        message.isStreaming
+                            ? <ToolActivityList items={message.toolActivity} brandColor={brandColor} />
+                            : (
+                                <details className="mb-1 text-[11px] text-gray-400">
+                                    <summary className="cursor-pointer select-none hover:text-gray-600">
+                                        {summarizeActivity(message.toolActivity)}
+                                    </summary>
+                                    <div className="mt-1"><ToolActivityList items={message.toolActivity} brandColor={brandColor} /></div>
+                                </details>
+                            )
                     )}
 
                     {!isUser && message.isStreaming && !message.content && (
@@ -485,6 +537,8 @@ const EnhancedMessageComponent: React.FC<EnhancedMessageComponentProps> = ({
                                 content={message.content}
                                 onCitationClick={onCitationClick}
                                 brandColor={brandColor}
+                                sources={message.citations}
+                                numberedCitations
                             />
                         </div>
                     ) : null}
@@ -510,41 +564,21 @@ const EnhancedMessageComponent: React.FC<EnhancedMessageComponentProps> = ({
                                     <ArrowDownTrayIcon className="w-3 h-3 text-gray-400" />
                                 </button>
                             )}
-                        </div>
-                    )}
-
-                    {!isUser && !message.isStreaming && message.content && (onSendMessageToDeck || onMessageToNewPresentation || onMessageToOpra) && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                            {onSendMessageToDeck && (
-                                <button
-                                    onClick={() => onSendMessageToDeck(message)}
-                                    className="text-[11px] px-2.5 py-1 rounded-full border hover:opacity-90 inline-flex items-center gap-1.5"
-                                    style={{ borderColor: `${brandColor}50`, color: brandColor, backgroundColor: `${brandColor}08` }}
-                                    title={activeDeckTitle ? `Add this answer as a new section in ${activeDeckTitle}` : 'Add to active deck'}
-                                >
-                                    <PlusIcon className="w-3 h-3" />
-                                    Send to deck{activeDeckTitle ? ` (${activeDeckTitle})` : ''}
+                            {onSendMessageToDeck ? (
+                                <button onClick={() => onSendMessageToDeck(message)} className="p-1 hover:bg-gray-100 rounded"
+                                        title={activeDeckTitle ? `Add to ${activeDeckTitle}` : 'Add to active deck'}>
+                                    <PlusIcon className="w-3 h-3 text-gray-400" />
                                 </button>
-                            )}
-                            {!onSendMessageToDeck && onMessageToNewPresentation && (
-                                <button
-                                    onClick={() => onMessageToNewPresentation(message)}
-                                    className="text-[11px] px-2.5 py-1 rounded-full border hover:opacity-90 inline-flex items-center gap-1.5"
-                                    style={{ borderColor: `${brandColor}50`, color: brandColor, backgroundColor: `${brandColor}08` }}
-                                    title="Make a new presentation from this answer"
-                                >
-                                    <PlusIcon className="w-3 h-3" />
-                                    New presentation
+                            ) : onMessageToNewPresentation && (
+                                <button onClick={() => onMessageToNewPresentation(message)} className="p-1 hover:bg-gray-100 rounded"
+                                        title="New presentation from this answer">
+                                    <PlusIcon className="w-3 h-3 text-gray-400" />
                                 </button>
                             )}
                             {onMessageToOpra && (
-                                <button
-                                    onClick={() => onMessageToOpra(message)}
-                                    className="text-[11px] px-2.5 py-1 rounded-full border hover:opacity-90 inline-flex items-center gap-1.5 border-amber-300 text-amber-800 bg-amber-50/60"
-                                    title="Use this answer to seed an OPRA records request"
-                                >
-                                    <DocumentTextIcon className="w-3 h-3" />
-                                    Make OPRA request
+                                <button onClick={() => onMessageToOpra(message)} className="p-1 hover:bg-gray-100 rounded"
+                                        title="Start a public-records request from this answer">
+                                    <DocumentTextIcon className="w-3 h-3 text-gray-400" />
                                 </button>
                             )}
                         </div>
@@ -568,7 +602,15 @@ const EnhancedMessageComponent: React.FC<EnhancedMessageComponentProps> = ({
                     {!isUser && !message.isStreaming && message.cost && isAdmin && <CostFooter cost={message.cost} />}
 
                     {!message.isStreaming && (
-                        <div className="text-[10px] text-gray-400 mt-1.5">{formatTimestamp(message.timestamp)}</div>
+                        <div className="text-[10px] text-gray-400 mt-1.5">
+                            {formatTimestamp(message.timestamp)}
+                            {!isUser && message.servedBy?.model && (
+                                <span> · {prettyModel(message.servedBy.model)}{message.servedBy.paidBy === 'user' ? ' · your API key' : ''}</span>
+                            )}
+                            {!isUser && (message.citations?.unverified?.length ?? 0) > 0 && (
+                                <span className="text-amber-600"> · {message.citations!.unverified.length} citation{message.citations!.unverified.length > 1 ? 's' : ''} not verified</span>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

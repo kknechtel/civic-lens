@@ -61,6 +61,11 @@ entities:
   - long beach public library
   - library board of trustees
 ai:
+  suggested_questions:
+  - Is Long Beach in fiscal stress, according to the State Comptroller?
+  - Who supplies the city's water-treatment chemicals?
+  - What did the city pay for its newest fire trucks?
+  - Which contracts were awarded as emergencies?
   background: |
     CITY FACTS:
     - Long Beach is a city in Nassau County on Long Island, NY, on the barrier island between Reynolds Channel and the Atlantic Ocean. ZIP 11561.

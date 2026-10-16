@@ -133,6 +133,8 @@ class AIContext(BaseModel):
     """Local knowledge for the chat model. Keep facts sourced and dated."""
     background: str = ""
     notes: list[str] = Field(default_factory=list)
+    # Shown as starter questions when the chat opens; answerable from the corpus.
+    suggested_questions: list[str] = Field(default_factory=list)
 
 
 class SearchConfig(BaseModel):
@@ -337,6 +339,7 @@ class Municipality(BaseModel):
             "entities": [e.model_dump(include={"key", "label", "short", "kind", "jurisdiction"}) for e in self.entities],
             "jurisdictions": self.jurisdictions,
             "records_law": self.state_profile.records_law.model_dump() if self.state_profile else None,
+            "suggested_questions": self.ai.suggested_questions,
         }
 
 

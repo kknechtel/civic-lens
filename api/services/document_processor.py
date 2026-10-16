@@ -44,6 +44,7 @@ async def process_one(db, doc, *, enrich: bool = True, reextract: bool = False,
     from services.ingestion import ingest_document
     from services.s3_service import S3Service
     from services.text_extract import extract
+    from services.ai import pin
 
     meta = dict(doc.metadata_ or {})
     res = ProcessResult(str(doc.id), doc.status or "")
@@ -75,10 +76,10 @@ async def process_one(db, doc, *, enrich: bool = True, reextract: bool = False,
             return res
 
         # 2. Enrich (title / summary / classification). Optional: without a
-        # GEMINI_API_KEY the doc is still indexed with scraper-derived metadata.
-        if enrich and not os.getenv("GEMINI_API_KEY", "").strip():
+        # a Gemini key the doc is still indexed with scraper-derived metadata.
+        if enrich and pin("enrichment", "gemini") is None:
             enrich = False
-            meta["enrich_skipped"] = "no GEMINI_API_KEY"
+            meta["enrich_skipped"] = "No gemini key configured (Admin → AI)"
         if enrich:
             er = await asyncio.to_thread(doc_enrich.analyze, doc, text)
             res.cost_usd = er.cost_usd

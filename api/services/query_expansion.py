@@ -20,7 +20,6 @@ The expansion is intended to be wrapped in an FTS OR query, e.g.
   websearch_to_tsquery('english', 'CAFR OR "comprehensive annual financial report"')
 """
 import logging
-import os
 import re
 from functools import lru_cache
 
@@ -187,8 +186,9 @@ def _llm_paraphrase(query: str) -> list[str]:
     Cached at the module level (via expand's lru_cache) so a repeated user
     query doesn't re-pay the round-trip.
     """
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
+    from services.ai import pin
+    route = pin("query_expansion", "gemini")
+    if route is None:
         return []
 
     prompt = (
@@ -204,9 +204,9 @@ def _llm_paraphrase(query: str) -> list[str]:
     try:
         from google import genai
         from google.genai import types
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(api_key=route.key)
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=route.model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.2,
@@ -232,11 +232,12 @@ def _llm_paraphrase(query: str) -> list[str]:
                 sess = SessionLocal()
                 try:
                     record_usage(
-                        sess, source="query_expansion", model="gemini-2.5-flash",
+                        sess, source="query_expansion", model=route.model,
                         input_tokens=int(getattr(usage, "prompt_token_count", 0) or 0),
                         output_tokens=int(getattr(usage, "candidates_token_count", 0) or 0),
                         estimated_cost_usd=0.0,  # gemini-flash is near-free at this size
                         metadata={"query": query},
+                        payer=route.payer, provider=route.provider,
                     )
                 finally:
                     sess.close()

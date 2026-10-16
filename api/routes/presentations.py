@@ -46,7 +46,7 @@ from auth import (
     shared_resource_ids,
     user_share_role,
 )
-from config import ANTHROPIC_API_KEY
+from services.ai import model_for, pin
 from database import get_db, SessionLocal
 from models.presentation import Presentation
 from models.user import User
@@ -439,6 +439,8 @@ def fact_check(presentation_id: str, db: Session = Depends(get_db),
         db, p.sections or [],
         user_id=str(user.id), presentation_id=str(p.id),
     )
+    if result.get("error"):
+        raise HTTPException(402, result["error"])
     p.last_fact_check = result
     db.commit()
     return result
@@ -558,8 +560,9 @@ def ai_edit_section(
     the updated presentation (the section's `body` is replaced in place).
 
     Synchronous (no SSE) — these are usually fast (<10s) on Sonnet."""
-    if not ANTHROPIC_API_KEY:
-        raise HTTPException(503, "ANTHROPIC_API_KEY not configured")
+    route = pin("presentations", "anthropic", user.id)
+    if route is None:
+        raise HTTPException(402, "AI editing needs an Anthropic key. Add your own API key in Settings.")
     p = _get_editable_or_404(db, presentation_id, user)
 
     sections = list(p.sections or [])
@@ -588,9 +591,9 @@ def ai_edit_section(
 
     try:
         import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = anthropic.Anthropic(api_key=route.key)
         resp = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=route.model,
             max_tokens=4000,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -606,12 +609,13 @@ def ai_edit_section(
             raise HTTPException(502, "AI returned empty body")
         from services.usage import record_usage
         record_usage(
-            db, source="ai_edit", model="claude-sonnet-4-6",
+            db, source="ai_edit", model=route.model,
             input_tokens=getattr(resp.usage, "input_tokens", 0) or 0,
             output_tokens=getattr(resp.usage, "output_tokens", 0) or 0,
             user_id=str(user.id),
             resource_type="presentation", resource_id=str(p.id),
             metadata={"action": body.action, "section_id": body.section_id},
+            payer=route.payer, provider=route.provider,
         )
     except anthropic.APIStatusError as exc:
         logger.error("ai-edit Anthropic error: %s", exc)
@@ -672,12 +676,13 @@ RULES:
 Output ONLY valid JSON — no fences, no commentary."""
 
 
-def _structure_chat_with_claude(messages: list[dict], title_hint: Optional[str]) -> tuple[dict, int, int]:
+def _structure_chat_with_claude(messages: list[dict], title_hint: Optional[str], key: str,
+                                model: str) -> tuple[dict, int, int]:
     """Returns (deck_json, input_tokens, output_tokens) so the caller can
     record usage."""
     import anthropic
     import re as _re
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=key)
 
     # Belt-and-suspenders: extract every ```chart fence from the transcript and
     # replace with an opaque placeholder before sending to Claude. The model
@@ -709,18 +714,17 @@ def _structure_chat_with_claude(messages: list[dict], title_hint: Optional[str])
     if title_hint:
         prompt += f"\n\ntitle_hint: {title_hint}"
 
-    # Use Haiku 4.5 — structuring a transcript into JSON sections is a
-    # straightforward reformatting task; Sonnet's ~5x latency isn't worth it.
+    # Fast-role model — structuring a transcript into JSON sections is a
+    # straightforward reformatting task; the deep model's latency isn't worth it.
     # 1M-context beta still useful when transcripts are large after trimming.
     # Anthropic SDK refuses non-streaming for long requests, so we stream.
     text = ""
     in_t = out_t = 0
     with client.messages.stream(
-        model="claude-haiku-4-5-20251001",
+        model=model,
         max_tokens=12000,
         system=prompt,
         messages=[{"role": "user", "content": f"TRANSCRIPT:\n\n{transcript}"}],
-        extra_headers={"anthropic-beta": "context-1m-2025-08-07"},
     ) as stream:
         for chunk in stream.text_stream:
             text += chunk
@@ -767,13 +771,17 @@ def create_from_chat(
 ):
     """Convert a chat conversation into a draft presentation. The assistant
     structures the messages into 4-8 sections, preserving citations."""
-    if not ANTHROPIC_API_KEY:
-        raise HTTPException(503, "ANTHROPIC_API_KEY not configured")
+    route = pin("presentations", "anthropic", user.id)
+    if route is None:
+        raise HTTPException(402, "Turning a chat into a deck needs an Anthropic key. Add your own API key in Settings.")
     if not body.messages:
         raise HTTPException(400, "messages cannot be empty")
 
     msg_dicts = [{"role": m.role, "content": m.content} for m in body.messages]
-    structured, in_t, out_t = _structure_chat_with_claude(msg_dicts, body.title_hint)
+    # Key and payer from the "presentations" feature; the model is the fast
+    # role's on Anthropic (cheap reformatting, as before).
+    model = model_for("fast", "anthropic")
+    structured, in_t, out_t = _structure_chat_with_claude(msg_dicts, body.title_hint, route.key, model)
 
     title = (structured.get("title") or body.title_hint or "Untitled Presentation").strip()
     raw_sections = structured.get("sections") or []
@@ -792,11 +800,12 @@ def create_from_chat(
 
     from services.usage import record_usage
     record_usage(
-        db, source="deck_from_chat", model="claude-haiku-4-5-20251001",
+        db, source="deck_from_chat", model=model,
         input_tokens=in_t, output_tokens=out_t,
         user_id=str(user.id),
         resource_type="presentation", resource_id=str(p.id),
         metadata={"message_count": len(msg_dicts)},
+        payer=route.payer, provider=route.provider,
     )
 
     return _serialize(p, user)

@@ -29,13 +29,11 @@ from typing import Optional
 
 import anthropic
 
-from config import ANTHROPIC_API_KEY
+from services.ai import pin
 
 logger = logging.getLogger(__name__)
 
-# Sonnet has the best price/perf for vision-heavy structured extraction.
-# Opus would also work but is overkill for OCR-and-format.
-MODEL = "claude-sonnet-4-6"
+# Model comes from the "event_images" feature's role (vision; Admin → AI).
 MAX_TOKENS = 4096
 
 # Cap input size — most monthly calendar images are well under 2 MB.
@@ -130,8 +128,9 @@ def extract_events(
     can map to a clean 4xx. Per-event parse glitches are silently
     dropped and surfaced in `notes`.
     """
-    if not ANTHROPIC_API_KEY:
-        raise RuntimeError("ANTHROPIC_API_KEY not configured")
+    route = pin("event_images", "anthropic")
+    if route is None:
+        raise RuntimeError("No anthropic key configured (Admin → AI)")
     if mime_type not in ALLOWED_MIME_TYPES:
         raise RuntimeError(f"unsupported image type: {mime_type}")
     if len(image_bytes) > MAX_IMAGE_BYTES:
@@ -141,10 +140,10 @@ def extract_events(
         )
 
     b64 = base64.b64encode(image_bytes).decode("ascii")
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=route.key)
 
     resp = client.messages.create(
-        model=MODEL,
+        model=route.model,
         max_tokens=MAX_TOKENS,
         system=_SYSTEM_PROMPT,
         messages=[{
@@ -196,5 +195,5 @@ def extract_events(
         "events": cleaned,
         "notes": notes,
         "dropped": dropped,
-        "model": MODEL,
+        "model": route.model,
     }

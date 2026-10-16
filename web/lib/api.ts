@@ -1560,3 +1560,49 @@ export function getIntegrityAwards(params: { vendor?: string; procurement?: stri
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
   return request<IntegrityAward[]>(`/api/integrity/awards${qs ? `?${qs}` : ""}`);
 }
+
+// ─── AI keys & settings ───────────────────────────────────────────────
+
+export interface AiProvider {
+  id: string; label: string; key_hint: string; docs: string; kinds: string[]; models: string[];
+  has_key: boolean; from_env?: boolean; last4?: string; status?: "untested" | "ok" | "invalid";
+  status_detail?: string | null; verified_at?: string | null; added_at?: string | null;
+}
+export interface AiRoute { provider: string; model: string }
+export interface MyAi {
+  providers: AiProvider[];
+  features: { feature: string; role: string; available: boolean; via?: string; reason?: string; sponsored: boolean }[];
+  roles: Record<string, string>;
+  prefs: Record<string, AiRoute>;
+  spend_this_month: { own_keys: number; sponsored: number; sponsored_cap: number };
+}
+export interface AdminAi {
+  providers: AiProvider[];
+  routes: Record<string, AiRoute>;
+  roles: Record<string, string>;
+  features: { feature: string; role: string; interactive: boolean; sponsored: boolean }[];
+  caps: { deployment_monthly_usd: number; user_monthly_usd: number };
+  rates: Record<string, [number, number]>;
+  spend_this_month: { deployment: number; by_user: { user: string; usd: number; calls: number }[];
+                      by_feature: { source: string; usd: number; calls: number }[] };
+}
+export interface KeyTestResult { ok: boolean; detail: string; last4?: string; status?: string }
+
+export const getMyAi = () => request<MyAi>("/api/ai/me");
+export const putMyKey = (provider: string, key: string) =>
+  request<KeyTestResult>(`/api/ai/keys/${provider}`, { method: "PUT", body: JSON.stringify({ key }) });
+export const deleteMyKey = (provider: string) => request<{ deleted: boolean }>(`/api/ai/keys/${provider}`, { method: "DELETE" });
+export const testMyKey = (provider: string) => request<KeyTestResult>(`/api/ai/keys/${provider}/test`, { method: "POST" });
+export const putMyPrefs = (routes: Record<string, AiRoute | null>) =>
+  request<{ routes: Record<string, AiRoute> }>("/api/ai/prefs", { method: "PUT", body: JSON.stringify({ routes }) });
+
+export const getAdminAi = () => request<AdminAi>("/api/admin/ai");
+export const putDeploymentKey = (provider: string, key: string) =>
+  request<KeyTestResult>(`/api/admin/ai/keys/${provider}`, { method: "PUT", body: JSON.stringify({ key }) });
+export const deleteDeploymentKey = (provider: string) =>
+  request<{ deleted: boolean }>(`/api/admin/ai/keys/${provider}`, { method: "DELETE" });
+export const testDeploymentKey = (provider: string) =>
+  request<KeyTestResult>(`/api/admin/ai/keys/${provider}/test`, { method: "POST" });
+export const putAdminAiSettings = (body: Partial<{ routes: Record<string, AiRoute>; sponsored: string[];
+  caps: Record<string, number>; rates: Record<string, [number, number]> }>) =>
+  request<AdminAi>("/api/admin/ai/settings", { method: "PUT", body: JSON.stringify(body) });

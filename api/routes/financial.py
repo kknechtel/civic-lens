@@ -640,7 +640,7 @@ def diagnostics(
 ):
     """End-to-end pipeline health: counts by status, LLM keys configured,
     last drill error, statements without line items. Use to debug 'drills aren't running'."""
-    import os
+    from services.ai import deployment_key
     from collections import Counter
 
     counts_by_status = dict(
@@ -681,8 +681,9 @@ def diagnostics(
 
     return {
         "llm_keys": {
-            "anthropic_api_key_set": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
-            "gemini_api_key_set": bool(os.environ.get("GEMINI_API_KEY", "").strip()),
+            # Deployment keys (Admin → AI, else env) — what background extraction uses.
+            "anthropic_api_key_set": deployment_key("anthropic", db) is not None,
+            "gemini_api_key_set": deployment_key("gemini", db) is not None,
         },
         "statements": {
             "by_status": counts_by_status,
