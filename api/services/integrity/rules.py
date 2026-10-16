@@ -189,6 +189,9 @@ def near_threshold(ctx: Ctx) -> list[Flag]:
     for a in ctx.awards:
         if a.get("action_type") not in SPEND or a.get("procurement") in BID_EXEMPT or _professional(a) or not a.get("amount"):
             continue
+        # The threshold depends on the date; an unnamed "other" item is rarely a purchase.
+        if not a.get("meeting_date") or (a.get("action_type") == "other" and not a.get("vendor_norm")):
+            continue
         t = ctx.threshold(a)
         if ratio * t <= a["amount"] < t:
             out.append(Flag(
