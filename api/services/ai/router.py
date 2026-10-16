@@ -222,3 +222,46 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int, rates: dict
         base = next((fam for frag, fam in catalog.FAMILY_FALLBACK if frag in model.lower()), "claude-sonnet-4-6")
         r = rates.get(base) or catalog.DEFAULT_RATES[base]
     return (input_tokens * r[0] + output_tokens * r[1]) / 1_000_000, estimated
+
+
+def model_for(role: str, provider: str, db=None) -> str:
+    """The model this deployment uses for `role` on `provider` (call sites tied to one SDK)."""
+    own = db is None
+    db = db or _session()
+    try:
+        p, m = settings(db)["routes"][role]
+    except Exception:
+        p, m = catalog.DEFAULT_ROUTES[role][0]
+    finally:
+        if own:
+            db.close()
+    if p == provider:
+        return m
+    return next((mm for pp, mm in catalog.DEFAULT_ROUTES[role] if pp == provider), catalog.MODELS[provider][0])
+
+
+def pin(feature: str, provider: str, user_id=None) -> Optional[Route]:
+    """Route for `feature` restricted to one provider, or None if no key for it.
+
+    For code written against a single SDK. Interactive features honour the
+    same who-pays rules as resolve(): the user's own key first, then the
+    deployment's if the feature is sponsored and within caps."""
+    role, interactive = catalog.FEATURES[feature]
+    db = _session()
+    try:
+        model = model_for(role, provider, db)
+        if user_id:
+            k = user_key(db, provider, user_id)
+            if k:
+                return Route(feature, role, provider, model, k, "user")
+        if interactive and user_id:
+            try:
+                r = resolve(feature, user_id, db)
+            except NoAIAccess:
+                return None
+            if r.payer == "user":  # user has a key, but for another provider
+                return None
+        k = deployment_key(provider, db)
+        return Route(feature, role, provider, model, k, "deployment") if k else None
+    finally:
+        db.close()

@@ -46,10 +46,11 @@ def test_enrich_prompt_for_atlantic_highlands(as_profile):
 
 def test_chat_instructions(as_profile):
     as_profile("long-beach-ny")
-    from routes import chat
+    from services.chat import prompt
 
-    text = chat._background() + chat._working_instructions()
-    assert "Long Beach AI Expert" in text
+    text = prompt._background() + prompt._working_instructions()
+    assert "City of Long Beach" in text and "research assistant" in text
+    assert "{brand_color}" not in text
     assert "Fiscal Stress Monitoring System" in text  # NY state note
     assert "{which_town}" not in text and "{jurisdiction_notes}" not in text
     assert "N.J.S.A." not in text and "Atlantic Highlands" not in text

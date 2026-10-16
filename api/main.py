@@ -50,6 +50,7 @@ from routes.event_submissions import router as event_submissions_router
 from routes.event_ingest import router as event_ingest_router
 from routes.municipality import router as municipality_router
 from routes.integrity import router as integrity_router
+from routes.ai import admin_router as ai_admin_router, router as ai_router
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(documents_router, prefix="/api/documents", tags=["documents"])
@@ -74,6 +75,8 @@ app.include_router(event_submissions_router, prefix="/api/event-submissions", ta
 app.include_router(event_ingest_router, prefix="/api/event-ingest", tags=["event-ingest"])
 app.include_router(municipality_router, prefix="/api/municipality", tags=["municipality"])
 app.include_router(integrity_router, prefix="/api/integrity", tags=["integrity"])
+app.include_router(ai_router, prefix="/api/ai", tags=["ai"])
+app.include_router(ai_admin_router, prefix="/api/admin/ai", tags=["ai-admin"])
 
 
 @app.on_event("startup")
