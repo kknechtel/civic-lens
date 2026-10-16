@@ -1,7 +1,7 @@
 """Model prompts are rendered from the profile — no town leaks into another."""
 import pytest
 
-from municipality import get_municipality, load_municipality
+from municipality import get_municipality
 
 
 class _Doc:
@@ -57,18 +57,19 @@ def test_chat_instructions(as_profile):
 
 
 def test_no_town_names_hardcoded_in_core_python():
-    """Guard against regressions: AH-specific names belong in its profile.
-    Legacy crawlers and NJ-specific financial modules are allow-listed."""
+    """Guard against regressions: AH-specific names belong in its profile, and
+    its hand-written crawlers in jurisdictions/.../crawlers.py. The NJ-specific
+    financial modules and two event scrapers are still allow-listed."""
     import re
     from pathlib import Path
 
     api = Path(__file__).resolve().parent.parent
-    allow = {"services/scraper/crawlers.py", "services/scraper/config.py", "services/event_scrapers/html_parse.py",
+    allow = {"services/event_scrapers/html_parse.py",
              "services/event_scrapers/playwright_adapter.py", "services/financial_agent.py",
              "services/financial_anomaly.py", "services/financial_extractor_v2.py",
              "services/financial_extractor.py", "services/financial_reconcile.py", "services/title_extractor.py",
              "services/FINANCIAL_PIPELINE.md"}
-    pat = re.compile(r"Atlantic Highlands|ahnj\.info|Henry Hudson|HHRSD|Monmouth", re.I)
+    pat = re.compile(r"Atlantic Highlands|ahnj|Henry Hudson|HHRSD|tridistrict|Monmouth", re.I)
     offenders = []
     for p in list(api.glob("routes/*.py")) + list(api.glob("services/**/*.py")) + [api / "main.py", api / "config.py"]:
         rel = p.relative_to(api).as_posix()

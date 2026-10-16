@@ -8,9 +8,14 @@ import os
 import time
 import logging
 import requests
+from functools import lru_cache
 from requests.exceptions import ConnectTimeout, ConnectionError as RequestsConnectionError
 from urllib.parse import urljoin, urlparse, urlencode
 from bs4 import BeautifulSoup
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from urllib.robotparser import RobotFileParser
 
 from .config import (
     RESPECT_ROBOTS_TXT,
@@ -23,7 +28,7 @@ from .config import (
     MAX_RETRIES,
     USER_AGENT,
 )
-from .utils import url_to_filename, categorize_url
+from .utils import url_to_filename
 
 logger = logging.getLogger("scraper")
 
@@ -31,28 +36,32 @@ logger = logging.getLogger("scraper")
 _HOST_FAIL_THRESHOLD = 3
 _CONNECT_TIMEOUT = 10  # short connect TO so blocked hosts fail fast; read TO stays at REQUEST_TIMEOUT
 
-# Per-host proxy routing. Some target hosts firewall or throttle AWS source
-# IPs (ahnj.com outright firewalls; highlands-nj.municodemeetings.com appears
-# to throttle pagination from datacenter IPs). When AHNJ_PROXY_URL is set we
-# route requests to listed hosts through a Cloudflare Worker that fetches
-# the target from a residential-class IP and returns the bytes verbatim.
-# The Worker source is in workers/ahnj-proxy/.
-_PROXY_URL = (os.getenv("AHNJ_PROXY_URL") or "").rstrip("/")
-_PROXY_SECRET = os.getenv("AHNJ_PROXY_SECRET") or ""
-_PROXIED_HOSTS = {"www.ahnj.com", "ahnj.com", "highlands-nj.municodemeetings.com"}
+# Per-host proxy routing. Some target hosts firewall or throttle cloud source
+# IPs. A deployment lists them under crawl.proxy in its jurisdiction profile
+# (hosts + the env vars holding the proxy URL and secret); requests to those
+# hosts go through a fetch proxy that returns the target's bytes verbatim.
+# With the proxy URL unset, requests go direct so local dev keeps working.
+@lru_cache(maxsize=1)
+def _proxy_config() -> tuple[str, str, frozenset[str]]:
+    try:
+        from municipality import get_municipality
+        proxy = get_municipality().crawl.proxy
+    except Exception:  # no deployment configured (scripts, some tests)
+        return "", "", frozenset()
+    url = (os.getenv(proxy.url_env) or "").rstrip("/")
+    return url, os.getenv(proxy.secret_env) or "", frozenset(h.lower() for h in proxy.hosts)
 
 
 def _proxy_for(url: str) -> tuple[str, dict]:
     """If url's host is proxied and a proxy is configured, return
-    (rewritten_url, extra_headers). Otherwise return (url, {}).
-    Falls back to the direct URL when AHNJ_PROXY_URL is unset so local
-    dev keeps working without the Worker."""
-    if not _PROXY_URL:
+    (rewritten_url, extra_headers). Otherwise return (url, {})."""
+    proxy_url, secret, hosts = _proxy_config()
+    if not proxy_url:
         return url, {}
     host = urlparse(url).netloc.lower()
-    if host not in _PROXIED_HOSTS:
+    if host not in hosts:
         return url, {}
-    return f"{_PROXY_URL}/?{urlencode({'url': url})}", {"X-Proxy-Secret": _PROXY_SECRET}
+    return f"{proxy_url}/?{urlencode({'url': url})}", {"X-Proxy-Secret": secret}
 
 
 class BasicScraper:

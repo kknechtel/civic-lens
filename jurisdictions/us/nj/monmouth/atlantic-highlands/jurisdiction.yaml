@@ -1,8 +1,9 @@
 # Atlantic Highlands, NJ — the original deployment (ahnj.info).
 #
 # Most sources still use hand-written crawlers ("legacy" adapter) ported from
-# the original app; source ids match the old crawler names so existing rows'
-# metadata.source_site keeps mapping to the right entity.
+# the original app (classes in crawlers.py next to this file); source ids match
+# the old crawler names so existing rows' metadata.source_site keeps mapping to
+# the right entity.
 name: Borough of Atlantic Highlands
 short_name: Atlantic Highlands
 level: municipality
@@ -22,6 +23,15 @@ branding:
   banner_alt: Sunset over Raritan Bay from Atlantic Highlands
 crawl:
   min_delay_seconds: 1.0
+  # ahnj.com firewalls cloud IPs and the Highlands Municode portal throttles
+  # pagination from them; route both through the Cloudflare Worker proxy.
+  proxy:
+    url_env: AHNJ_PROXY_URL
+    secret_env: AHNJ_PROXY_SECRET
+    hosts:
+    - www.ahnj.com
+    - ahnj.com
+    - highlands-nj.municodemeetings.com
 entities:
 - key: atlantic_highlands
   label: Borough of Atlantic Highlands

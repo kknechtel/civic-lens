@@ -15,7 +15,6 @@ import threading
 import uuid
 import mimetypes
 from datetime import datetime
-from typing import Optional
 
 from municipality import get_municipality
 from services.sources import site_table
@@ -38,7 +37,7 @@ MAX_PARALLEL_SITES = max(1, int(os.environ.get("SCRAPER_MAX_PARALLEL", "4")))
 
 # Global state for tracking scraper progress.
 # `per_site` is keyed by site_name and contains a sub-dict of the same metric set
-# so the UI can render a per-source progress strip ("ahnj.com: 312 found, 287 uploaded, 25 skipped").
+# so the UI can render a per-source progress strip ("example.gov: 312 found, 287 uploaded, 25 skipped").
 _scraper_status = {
     "running": False,
     "current_site": None,
@@ -388,7 +387,7 @@ async def run_scraper(
     and creates Document records in the database.
 
     historical: when False, crawlers skip seed paths flagged as archive
-        material (AHNJ 2005-2013, older Planning Board archive trees). The
+        material (e.g. a source's `historical_pages` archive trees). The
         UI "Skip historical archives" checkbox passes False.
     triggered_by: arbitrary string written to scraper_runs.triggered_by
         for later auditing — typically "ui:<user_id>", "schedule", or
@@ -416,7 +415,6 @@ async def run_scraper(
 
     db = SessionLocal()
     s3 = S3Service()
-    downloader = BasicScraper()
 
     try:
         # Scraped rows need a real owner (projects.created_by / documents.uploaded_by

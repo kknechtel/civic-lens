@@ -1,23 +1,19 @@
 """
 PPTX + DOCX export for presentations.
 
-Direct python-pptx / python-docx generation, scoped to AHNJ's section types
+Direct python-pptx / python-docx generation, scoped to the section types presentations use
 (narrative / table / attachment / react_component). For react_component
 sections we emit a placeholder note since we can't render TSX server-side
 without a headless browser.
 
 Adapted from the bank-processor's document_builder approach but slimmed
-down to the section types AHNJ actually uses.
+down to the section types presentations actually use.
 """
 from __future__ import annotations
 
 import io
 import logging
-import os
 import re
-import tempfile
-import uuid
-from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +78,7 @@ def _markdown_blocks(md: str):
 def export_docx(presentation) -> tuple[bytes, str]:
     """Build a DOCX from the presentation, return (bytes, filename)."""
     from docx import Document as DocxDocument
-    from docx.shared import Pt, RGBColor, Inches
+    from docx.shared import Pt, RGBColor
 
     doc = DocxDocument()
     style = doc.styles["Normal"]

@@ -33,7 +33,7 @@ def url_to_filename(url: str) -> str:
 def url_to_descriptive_name(url: str, source_page: str = "", title: str = "") -> str:
     """
     Generate a descriptive filename from the URL path tree.
-    e.g. https://www.ahnj.com/ahnj/Government/Employees/2024%20Holiday%20Closures.pdf
+    e.g. https://www.example.gov/example/Government/Employees/2024%20Holiday%20Closures.pdf
     -> Government - Employees - 2024 Holiday Closures.pdf
     """
     parsed = urlparse(url)
@@ -52,12 +52,18 @@ def url_to_descriptive_name(url: str, source_page: str = "", title: str = "") ->
             filename = filename[: -len(e)]
             break
 
-    # Build descriptive prefix from path segments (skip domain-specific prefixes)
-    skip_segments = {"ahnj", "at0153", "documents", "apps", "pages", "index.jsp", "www.ahnj.com", "ecode360.com"}
+    # Build descriptive prefix from path segments, skipping boilerplate: generic
+    # CMS segments, a segment repeating the site's own name (example.gov/example/...),
+    # and the customer code that leads every eCode360 path (/AB1234/documents/...).
+    host = parsed.netloc.lower().split(":")[0]
+    host_labels = {lbl for lbl in host.split(".")[:-1] if lbl != "www"}
+    skip_segments = {"documents", "apps", "pages", "index.jsp", "ecode360.com"} | host_labels
     path_parts = []
-    for seg in segments[:-1]:  # exclude filename
+    for i, seg in enumerate(segments[:-1]):  # exclude filename
         clean = seg.strip()
         if clean.lower() in skip_segments:
+            continue
+        if i == 0 and host.endswith("ecode360.com") and _ECODE_CUSTOMER_RE.match(clean):
             continue
         # Clean up URL encoding artifacts
         clean = clean.replace("%20", " ").replace("+", " ").replace("_", " ")
@@ -71,7 +77,7 @@ def url_to_descriptive_name(url: str, source_page: str = "", title: str = "") ->
     # the file) so the discriminating bits — year folders, district codes,
     # archive subtree leaves — survive. Using the first 3 segments collapsed
     # NJ Education ACFR years (.../acfr/search/18/0130.pdf → .../search/24/...)
-    # and AHNJ Planning Board year subfolders into identical names.
+    # and per-year archive subfolders into identical names.
     if path_parts:
         prefix = " - ".join(path_parts[-3:])
         result = f"{prefix} - {clean_name}{ext}"
@@ -88,6 +94,9 @@ def url_to_descriptive_name(url: str, source_page: str = "", title: str = "") ->
             result = f"{_safe_filename(base)}{ext}"
 
     return _safe_filename(result)[:250]
+
+
+_ECODE_CUSTOMER_RE = re.compile(r"^[A-Za-z]{2}\d{4}$")
 
 
 def _safe_filename(name: str) -> str:

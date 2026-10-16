@@ -5,9 +5,20 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  JWT_SECRET: ci-only-placeholder-secret-value-0000000000
+
 jobs:
   api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: {POSTGRES_PASSWORD: postgres, POSTGRES_DB: civiclens_test}
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/civiclens_test
     defaults:
       run:
         working-directory: api
@@ -19,10 +30,59 @@ jobs:
           cache: pip
           cache-dependency-path: api/requirements.txt
       - run: pip install -r requirements.txt pytest pyyaml
+      - run: psql postgresql://postgres:postgres@localhost:5432/civiclens_test -c "CREATE EXTENSION IF NOT EXISTS vector"
       - run: pytest tests -q
       - name: Validate every jurisdiction as a deployment root
-        env: {JWT_SECRET: ci-only-placeholder-secret-value-0000000000}
         run: python -m scripts.check_profile --all
+
+  # Each test town is its own deployment: its own database, profile and
+  # retrieval eval over a real fixture corpus (tests/fixtures/corpus).
+  search:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        deployment: [atlantic-highlands-nj, long-beach-ny]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: {POSTGRES_PASSWORD: postgres}
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DEPLOYMENT: ${{ matrix.deployment }}
+      PGURL: postgresql://postgres:postgres@localhost:5432
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: api/requirements.txt
+      - run: pip install -r requirements.txt pyyaml
+      - name: Databases
+        run: |
+          for db in kw hybrid; do
+            psql $PGURL/postgres -c "CREATE DATABASE $db"
+            psql $PGURL/$db -c "CREATE EXTENSION vector; CREATE EXTENSION IF NOT EXISTS pg_trgm"
+          done
+      - name: Keyword search (no keys, no model)
+        env: {EMBEDDINGS_PROVIDER: none, DATABASE_URL: "${{ env.PGURL }}/kw"}
+        run: |
+          python -m scripts.load_fixture_corpus $DEPLOYMENT
+          python -m scripts.eval_search $DEPLOYMENT --show-misses --min-hit 0.85
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5
+      - name: Hybrid search (local embeddings)
+        env: {EMBEDDINGS_PROVIDER: local, DATABASE_URL: "${{ env.PGURL }}/hybrid", FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed}
+        run: |
+          python -m scripts.load_fixture_corpus $DEPLOYMENT
+          python -m scripts.eval_search $DEPLOYMENT --show-misses --min-hit 0.85
 
   web:
     runs-on: ubuntu-latest

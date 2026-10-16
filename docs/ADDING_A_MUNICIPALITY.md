@@ -179,6 +179,15 @@ adapter: ecode360  # params: {customer: AT0153}  (Cloudflare-protected; needs Ch
 Add a `SourceAdapter` subclass in `api/services/sources/`, register it in
 `registry.ADAPTERS`, and add a test with a recorded HTML fixture.
 
+For a one-off site that only one town needs, write a crawler class in that
+town's own `jurisdictions/<path>/crawlers.py` and point a source at it with
+`adapter: legacy` and `params: {class: MyCrawler}`. The class takes no
+constructor arguments and returns items from `find_documents()`. The class is
+looked up in the source's jurisdiction's `crawlers.py`, then in each ancestor's
+(county, state), then in `api/services/scraper/crawlers.py`. Plugins import core
+helpers as usual (`from services.scraper.scraper import BasicScraper`). See
+`jurisdictions/us/nj/monmouth/atlantic-highlands/crawlers.py`.
+
 ## 4. Check it
 
 ```bash
@@ -207,6 +216,11 @@ can opt in with `crawl.respect_robots: true` (inherited down the tree, overridab
 per source) or `RESPECT_ROBOTS_TXT=true`. Whatever the policy, the crawler sends
 its honest User-Agent, rate-limits (`crawl.min_delay_seconds`) and backs off on
 429s. `permission_note` remains available to record any arrangement with a site owner.
+
+Hosts that block cloud IPs can be routed through a fetch proxy with
+`crawl.proxy: {hosts: [...], url_env: ..., secret_env: ...}`. The proxy URL and
+secret are read from those environment variables, and requests go direct when
+the URL is unset.
 
 ## 6. New state?
 

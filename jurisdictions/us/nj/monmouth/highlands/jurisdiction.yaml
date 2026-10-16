@@ -3,6 +3,13 @@ name: Borough of Highlands
 short_name: Highlands
 level: municipality
 government_type: borough
+crawl:
+  # The Municode portal throttles pagination from cloud IPs (see atlantic-highlands).
+  proxy:
+    url_env: AHNJ_PROXY_URL
+    secret_env: AHNJ_PROXY_SECRET
+    hosts:
+    - highlands-nj.municodemeetings.com
 entities:
 - key: highlands
   label: Borough of Highlands

@@ -190,6 +190,17 @@ class Features(BaseModel):
     integrity: bool = True
 
 
+class CrawlProxy(BaseModel):
+    """Route requests for some hosts through a fetch proxy (e.g. a Worker on a
+    non-datacenter IP) for sites that firewall or throttle cloud IPs. The URL
+    and shared secret come from the named environment variables; with the URL
+    unset, requests go direct."""
+    model_config = {"extra": "forbid"}
+    hosts: list[str] = Field(default_factory=list)
+    url_env: str = "SCRAPER_PROXY_URL"
+    secret_env: str = "SCRAPER_PROXY_SECRET"
+
+
 class CrawlPolicy(BaseModel):
     model_config = {"extra": "forbid"}
     # Whether to obey robots.txt. Public records are public; operators decide.
@@ -197,6 +208,7 @@ class CrawlPolicy(BaseModel):
     respect_robots: bool = False
     # Always identify honestly and stay polite either way.
     min_delay_seconds: float = 1.5
+    proxy: CrawlProxy = Field(default_factory=CrawlProxy)
 
 
 class JurisdictionFile(BaseModel):
