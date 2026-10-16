@@ -57,7 +57,7 @@ def extract_document(db, doc) -> dict:
                      page=a.page, title=a.title, vendor_name=a.vendor_name, vendor_norm=norm_name(a.vendor_name) or None,
                      vendor_address=a.vendor_address, amount=a.amount, action_type=a.action_type,
                      procurement=a.procurement, bids_received=a.bids_received, account_code=a.account_code,
-                     quote=a.quote))
+                     quote=a.quote, details=getattr(a, "details", None) or {}))
     for b in extract_bill_list(text):
         db.add(Award(document_id=doc.id, entity_key=entity, meeting_date=facts_date, item_no=None, page=b.page,
                      title="Bill list: " + "; ".join(b.descriptions[:2]), vendor_name=b.vendor_name,
@@ -157,14 +157,37 @@ def dedupe_awards(awards: list[dict]) -> list[dict]:
     return list(keep.values())
 
 
+def estimate_dates_from_numbering(awards: list[dict]) -> None:
+    """NJ resolutions are numbered sequentially per year (068-2025). An undated one
+    sits between its dated neighbours; take the earlier neighbour's date."""
+    import re as _re
+    by_year: dict = {}
+    for a in awards:
+        m = _re.fullmatch(r"(\d{1,4})-(\d{4})", str((a.get("details") or {}).get("resolution_no") or ""))
+        if m:
+            by_year.setdefault((a.get("entity_key"), m.group(2)), []).append((int(m.group(1)), a))
+    for (_, yr), rows in by_year.items():
+        dated = sorted((n, a["meeting_date"]) for n, a in rows if a.get("meeting_date") and str(a["meeting_date"].year) == yr)
+        for n, a in rows:
+            if a.get("meeting_date") or not dated:
+                continue
+            before = [d for k, d in dated if k < n]
+            after = [d for k, d in dated if k > n]
+            if before and after:
+                a["meeting_date"] = before[-1]
+                a["details"] = {**(a.get("details") or {}), "date_estimated": True,
+                                "date_range": [str(before[-1]), str(after[0])]}
+
+
 def build_context(db) -> Ctx:
     muni = get_municipality()
-    awards = _rows(db.query(Award).all())
+    awards = [a for a in _rows(db.query(Award).all()) if not (a.get("details") or {}).get("withdrawn")]
     canon = canonical_vendors([a["vendor_norm"] for a in awards if a.get("vendor_norm")])
     for a in awards:
         if a.get("vendor_norm"):
             a["vendor_norm"] = canon.get(a["vendor_norm"], a["vendor_norm"])
     awards = dedupe_awards(awards)
+    estimate_dates_from_numbering(awards)
     for a in awards:
         if a.get("meeting_date"):
             a["fiscal_year"] = muni.fiscal_year_for(a["meeting_date"].year, a["meeting_date"].month, a.get("entity_key"))

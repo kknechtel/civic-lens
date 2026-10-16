@@ -25,13 +25,63 @@ _NUM_DATE_RE = re.compile(r"\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2}|\d{2})\b")
 
 # Item boundaries inside agenda packets / minutes.
 _ITEM_RE = re.compile(
-    r"(?im)^[ \t]*(?:item\s+no\.?\s*(?P<a>\d+[a-z]?)\b|resolution\s+(?:no\.?|number|#)\s*(?P<b>[\w\-/]*\d[\w\-/]*)?)"
+    r"(?im)^[ \t]*(?:item\s+no\.?\s*(?P<a>\d+[a-z]?)\b|resolution\s+(?:no\.?|number|#)\s*(?P<b>[\w\-/]*\d[\w\-/]*)?"
+    # NJ header line: "RESOLUTION 039-2026" / "RESOLUTION NO. 2026-039" on its own line
+    r"|resolution\s+(?:no\.?\s*)?(?P<c>\d{1,4}\s*[-–]\s*\d{2,4})[ \t]*$)"
 )
+
+
+def normalize(text: str) -> str:
+    """PDF text quirks that silently defeat regexes: soft hyphens (NON\u00adFAIR),
+    non-breaking spaces, ligature dashes."""
+    return (text or "").replace("\u00ad", "-").replace("\u00a0", " ").replace("\u2011", "-")
+
+
+# Clerk's certification: "…at its Reorganization Meeting held January 1, 2026."
+_CERT_RE = re.compile(rf"at\s+its\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+Meeting\s+held\s+(({_MONTHS})\s+\d{{1,2}},\s*\d{{4}})", re.I)
+_TITLE_WORDS = r"(?:Council(?:man|woman|member|\s+President)?|Mayor|Deputy\s+Mayor|Commissioner|Trustee|Member)"
+_VOTE_FIELDS = {"yes": r"Yes|Ayes?", "no": r"No|Nays?", "abstain": r"Abstain(?:ed)?", "absent": r"Absent"}
+_P2P_DISCLOSURE_RE = re.compile(r"19:44A-20\.(?:5|8|26|27)|Business\s+Entity\s+Disclosure|Political\s+Contribution\s+Disclosure", re.I)
+_DOCKET_RE = re.compile(r"Docket\s+No\.?\s*([A-Z]{3}-[A-Z]-\d{2,6}-\d{2})")
+_CO_FROM_BY_RE = re.compile(r"from\s+\$\s?([\d,]+(?:\.\d{2})?)\s+by\s+\$\s?([\d,]+(?:\.\d{2})?)", re.I)
+_CO_TOTAL_RE = re.compile(r"(?:new|revised|adjusted|final)\s+(?:project\s+|contract\s+)?total\s+of\s+\$\s?([\d,]+(?:\.\d{2})?)", re.I)
+_CO_BASE_RE = re.compile(r"(?:in\s+the\s+amount\s+of|original\s+contract\s+(?:amount|price)\s+of)\s+\$\s?([\d,]+(?:\.\d{2})?)", re.I)
+_FUND_TOTAL_RE = re.compile(r"Total\s+to\s+be\s+paid\s+from\s+Fund\s+(\d+)\s+([A-Z][A-Z /&–\-]+?)\s+\$?\s*([\d,]+\.\d{2})", re.I)
+# NJ titles are often ALL CAPS: "…NON-FAIR AND OPEN WITH THE AUBREY GROUP FOR GRANT…", "…FOR FIORE PAVING FOR THE…"
+_TITLE_VENDOR_RES = [re.compile(r"\bWITH\s+(?P<v>[A-Z][A-Z0-9&.'’\- ]{2,60}?)\s+FOR\b"),
+                     re.compile(r"\bFOR\s+(?P<v>[A-Z][A-Z0-9&.'’\- ]{2,40}?)\s+FOR\s+THE\b"),
+                     re.compile(r"\bTO\s+(?P<v>[A-Z][A-Z0-9&.'’\- ]{2,60}?)\s+FOR\b")]
+_NJ_VENDOR_RE = re.compile(
+    r"(?:designated\s+as|(?:execute\s+an?\s+)?agreement\s+with|contract\s+to|awarded\s+to)\s+"
+    r"(?P<v>[A-Z][\w&.'’\- ]{2,70}?)(?=,\s*(?:\d|Esq|P\.?\s?O\.)|\s+for\b|\s+as\b|\s+in\s+the\s+amount|\s+at\s+a\b|\.\s)")
+
+
+def parse_votes(seg: str) -> dict:
+    """'Moved by Councilman Crowley; Seconded by Councilman Dougherty … Yes: … No: None Abstain: … Absent: …'"""
+    out: dict = {}
+    mv = re.search(rf"Moved\s+by\s+{_TITLE_WORDS}?\s*([A-Z][\w'’\-]+)", seg)
+    sc = re.search(rf"Seconded\s+by\s+{_TITLE_WORDS}?\s*([A-Z][\w'’\-]+)", seg)
+    if mv:
+        out["moved"] = mv.group(1)
+    if sc:
+        out["seconded"] = sc.group(1)
+    labels = "|".join(_VOTE_FIELDS.values())
+    for key, lab in _VOTE_FIELDS.items():
+        m = re.search(rf"\b(?:{lab})\s*:\s*(.*?)(?=\b(?:{labels})\s*:|\bI,\s|$)", seg)
+        if not m:
+            continue
+        names = [re.sub(rf"^{_TITLE_WORDS}\s+", "", n.strip(" .")).strip()
+                 for n in re.split(r",|\band\b", m.group(1))]
+        names = [n for n in names if re.fullmatch(r"[A-Z][\w'’\-]+(?:\s[A-Z][\w'’\-]+)?", n) and n.lower() != "none"]
+        out[key] = names
+    return out if ("yes" in out or "moved" in out) else {}
+
 _RESOLVED_RE = re.compile(r"\b(?:be it\s+)?resolved\b", re.I)
 
 _ENTITY_SUFFIX = (r"(?:Inc\.?|Incorporated|L\.?L\.?C\.?|L\.?L\.?P\.?|Corp\.?|Corporation|Company|Co\.|P\.?C\.?|"
                   r"P\.?A\.?|Ltd\.?|Associates|Group|Solutions|Services|Engineers?|Engineering|Construction|"
-                  r"Contracting|Contractors?|Consultants?|Consulting|Partners|Enterprises|Agency|Architects?)")
+                  r"Contracting|Contractors?|Consultants?|Consulting|Partners|Enterprises|Agency|Architects?|"
+                  r"Esq\.?|Paving|Electric|Industries|Plumbing|Landscaping|Excavating|Law\s+Group|Law\s+Firm)")
 _VENDOR_RE = re.compile(
     rf"(?:\bwith|\bto|\bfrom|\bretain|\bengage|\baward(?:ed)?\s+to|\bfirm\s+of)\s+(?:the\s+(?:firm|company)\s+of\s+)?"
     rf"(?P<v>[A-Z0-9][\w&.,'’\-/ ]{{1,90}}?\b{_ENTITY_SUFFIX})(?=[\s,.;:)]|$)"
@@ -57,16 +107,18 @@ _ACCOUNT_RE = re.compile(
 _PROCUREMENT = [  # first match wins
     ("emergency", re.compile(r"\bemergenc(?:y|ies)\b(?!\s+(?:Services|Management|Medical|Operations|Response|Communications|Preparedness|Planning|Supply|Dispatch|"
                              r"Vehicles?|Equipment|Generators?|Lighting|Notification|Alert|Call|Medical|Shelter|Contact))|N\.?J\.?S\.?A\.?\s*40A:11-6\b|General Municipal Law\s*§?\s*103\s*\(4\)", re.I)),
+    ("intergovernmental", re.compile(r"shared\s+services?\s+agreement|inter-?local\s+(?:services\s+)?agreement|"
+                                     r"40A:65|inter-?municipal\s+agreement|General\s+Municipal\s+Law\s+Article\s+5-G", re.I)),
     ("sole_source", re.compile(r"\bsole[\s-]source\b|\bsingle[\s-]source\b|\bproprietary\b", re.I)),
-    ("no_bid", re.compile(r"non-?\s*fair\s+and\s+open|without\s+(?:public\s+|competitive\s+)?bid|\bno[\s-]bid\b|"
+    ("no_bid", re.compile(r"non-?\s*fair\s+and\s+(?:non-?\s*)?open|without\s+(?:public\s+|competitive\s+)?bid|\bno[\s-]bid\b|"
                           r"exempt(?:ion)?\s+from\s+(?:public\s+|competitive\s+)?bidding|extraordinary,?\s+unspecifiable", re.I)),
     ("state_contract", re.compile(r"\bstate\s+contract\b|\bOGS\b|\bNYS\s+contract|\bcounty\s+contract\b|piggy-?back|"
                                   r"cooperative\s+(?:purchas|pricing|contract)|Sourcewell|BuyBoard|\bGSA\b|SAVVIK|HGAC|Omnia|NASPO|E&I\s+Cooperative|\bTIPS\b|"
                                   r"preferred\s+source|Industries\s+for\s+the\s+Disabled|NYSID|Corcraft|"
                                   r"\bN\.?J\.?\s*START\b|Educational\s+Services\s+Commission", re.I)),
     ("competitive_bid", re.compile(r"lowest\s+(?:responsible\s+|responsive\s+)*bidder|sealed\s+bids|bids?\s+(?:were|was)\s+received|"
-                                   r"public(?:ly)?\s+(?:bid|advertised)|fair\s+and\s+open\s+process", re.I)),
-    ("rfp", re.compile(r"request\s+for\s+proposals?|\bRFP\b|\bRFQ\b|proposals?\s+(?:were|was)\s+received|competitive\s+contracting", re.I)),
+                                   r"public(?:ly)?\s+(?:bid|advertised)", re.I)),
+    ("rfp", re.compile(r"request\s+for\s+proposals?|\bRFP\b|\bRFQ\b|proposals?\s+(?:were|was)\s+received|competitive\s+contracting|(?<!non-)(?<!non)(?<!non )fair\s+and\s+open\s+process", re.I)),
     # Continues/amends a contract procured earlier — competition (if any) happened then.
     ("prior_award", re.compile(r"pursuant\s+to\s+Resolution\s+No\.?\s*\d|previously\s+(?:authorized|awarded|approved|retained)|"
                                r"continued\s+retention|extend(?:ing|sion\s+of)?\s+(?:the\s+)?(?:current\s+|existing\s+)?(?:agreement|contract)|"
@@ -80,9 +132,19 @@ _ACTION = [  # first match wins
                                    r"tax\s+levy|adopt(?:ing|ion\s+of)\s+the\s+\d{4}", re.I)),
     ("bond", re.compile(r"bond\s+ordinance|amendatory\s+bond|bond\s+anticipation|issuance\s+of\s+(?:serial\s+)?(?:bonds|notes)|"
                         r"bond\s+resolution|financing\s+(?:the\s+)?costs?\s+of|principal\s+of\s+and\s+interest", re.I)),
+    # NJ budget mechanics: emergency/temporary appropriations (N.J.S.A. 40A:4-19/-20), Ch.159 items, tax policy.
+    ("budget_adoption", re.compile(r"temporary\s+(?:appropriation|budget)|emergency\s+(?:temporary\s+)?appropriation|"
+                                   r"special\s+item\s+of\s+revenue|N\.?J\.?S\.?A\.?\s*40A:4-87|grace\s+period|interest\s+rates?\s+"
+                                   r"(?:and|for)\s+(?:policy\s+for\s+)?(?:delinquent\s+)?taxes|cancel(?:ling|lation\s+of)\s+.*?(?:taxes|balances)", re.I)),
+    ("refund", re.compile(r"\breturn\s+of\s+(?:the\s+)?(?:performance\s+|maintenance\s+|street\s+opening\s+)?(?:bond|deposit|escrow|cash)|"
+                          r"\brefund(?:ing|s)?\b|redemption\s+of\s+(?:tax\s+sale\s+)?certificate|overpayment", re.I)),
     ("insurance", re.compile(r"\binsurance\b|\bpremium|\bcoverage\b|insurable\s+value|limits?\s+of\s+liability", re.I)),
     ("employment", re.compile(r"employment\s+(?:contract|agreement)|appoint\w*\s+[A-Z][a-z]+\s+[A-Z][a-z]+\s+as\s+(?:the\s+)?"
                               r"(?:Corporation\s+Counsel|City\s+Manager|Comptroller|Commissioner|Director|Chief)", re.I)),
+    ("employment", re.compile(r"\bLOSAP\b|length\s+of\s+service\s+award|"
+                              r"\b(?:appoint(?:ment|ing)\s+(?:of\s+)?|reassignment\s+of\s+|re-?distributing\s+duties\s+for\s+)"
+                              r"(?!.*\b(?:attorney|counsel|auditor|engineer|planner|appraiser|consultant|services?|bond\s+counsel|"
+                              r"agent\s+for|prosecutor|public\s+defender)\b)", re.I)),
     ("payout", re.compile(r"separation\s+pay|termination\s+pay|terminal\s+leave|pay[\s-]?outs?\b|accrued\s+(?:vacation|sick|leave)|"
                           r"unused\s+(?:sick|vacation)|retirement\s+incentive|severance", re.I)),
     ("settlement", re.compile(r"\bsettle(?:ment|d)?\b|\bjudgment\b|\bstipulation\b", re.I)),
@@ -95,6 +157,23 @@ _ACTION = [  # first match wins
     ("contract", re.compile(r"\bcontract\b|\bagreement\b|\bretain\b|\bservices\b|\brepairs?\b|\bconstruction\b|"
                            r"\bdesign\b|\bmaintenance\b|\binstall", re.I)),
 ]
+
+_APPOINT_RE = re.compile(r"\bappoint(?:ment|ed|ing)?\b|designated\s+as", re.I)
+_PROF_ROLE_RE = re.compile(r"\b(?:attorney|counsel|auditor|engineer|planner|appraiser|consultant|architect|surveyor|"
+                           r"prosecutor|public\s+defender|judge|professional)\b", re.I)
+_TERM_END_RE = re.compile(rf"(?:through|ending|until|terminat\w*\s+on)\s+(({_MONTHS})\s+\d{{1,2}},\s*\d{{4}})", re.I)
+# "appoint Doug Rohmeyer of Colliers Engineering & Design to provide …" → the firm is the vendor.
+_PERSON_OF_FIRM_RE = re.compile(
+    r"(?:appoint(?:ed)?|contract\s+to)\s+(?:and\s+appoint\s+)?(?P<p>(?:[A-Z][a-z]+\.?\s+){1,2}(?:[A-Z]\.\s+)?[A-Z][a-z]+)"
+    r"(?:,\s*[A-Z]{2,4}(?:,\s*[A-Z]{2,4})*)?\s+(?:of|with)\s+(?:the\s+firm\s+)?"
+    r"(?P<v>[A-Z][\w&.'’\- ]{2,60}?)(?=\s+(?:\[|\(|to|for|as|is)\b|,)")
+_PERSON_OF_FIRM2_RE = re.compile(  # "that Douglas M. Rohmeyer of CME Associates is hereby appointed"
+    r"(?P<p>(?:[A-Z][a-z]+\.?\s+){1,2}(?:[A-Z]\.\s+)?[A-Z][a-z]+)\s+(?:of|with)\s+(?:the\s+firm\s+)?"
+    r"(?P<v>[A-Z][\w&.'’\- ]{2,60}?)\s+(?:is|are)\s+hereby\s+appointed")
+_RATE_RE = re.compile(r"\$\s?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})?)\s*(?:per|an|/|a)\s*(?:hour|hr\b)|"
+                      r"hourly\s+rate\s+(?:of\s+)?\$\s?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})?)", re.I)
+_PROF_CONTRACT_RE = re.compile(r"non-?\s*fair\s+and\s+(?:non-?\s*)?open|professional\s+services?\s+contract|"
+                               r"(?:consultant|consulting|writer|writing)\s+services|award\s+of\s+(?:a|the)\s+contract", re.I)
 
 _TITLE_RE = re.compile(r"(Resolution\s+(?:Authorizing|Approving|for|Awarding|Accepting|Setting|Amending|to|Ratifying)\b[^\n]{3,200}"
                        r"(?:\n(?!\s*(?:WHEREAS|NOW|RESOLVED))[^\n]{3,160})?)", re.I)
@@ -178,6 +257,7 @@ class AwardFact:
     account_code: str | None
     meeting_date: date | None
     quote: str
+    details: dict = field(default_factory=dict)  # resolution_no, meeting_type, votes, base_amount, p2p_disclosure, docket…
 
 
 @dataclass
@@ -210,14 +290,14 @@ class Facts:
 def split_items(text: str) -> list[tuple[str | None, int, str]]:
     """[(item_no, start_offset, segment)] for every block that contains a RESOLVED clause."""
     # A bare "Resolution No." (number left blank on the agenda) isn't a boundary.
-    marks = [m for m in _ITEM_RE.finditer(text) if m.group("a") or m.group("b")]
+    marks = [m for m in _ITEM_RE.finditer(text) if m.group("a") or m.group("b") or m.group("c")]
     segs: list[tuple[str | None, int, str]] = []
     if marks:
         for i, m in enumerate(marks):
             end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
             seg = text[m.start():end]
             if _RESOLVED_RE.search(seg):
-                segs.append((m.group("a") or m.group("b"), m.start(), seg))
+                segs.append(((m.group("a") or m.group("b") or re.sub(r"\s", "", m.group("c") or "")), m.start(), seg))
     if not segs:
         # No numbered items: treat each WHEREAS…RESOLVED run as one resolution.
         for m in re.finditer(r"(?is)(WHEREAS\b.*?RESOLVED\b.*?)(?=\bWHEREAS\b(?!.*RESOLVED.*\bWHEREAS)|\Z)", text):
@@ -234,6 +314,7 @@ def _classify(patterns, text: str, default: str) -> tuple[str, re.Match | None]:
 
 
 def extract_awards(text: str, fallback_date: date | None = None) -> list[AwardFact]:
+    text = normalize(text)
     out: list[AwardFact] = []
     for item_no, start, raw in split_items(text):
         # Collapse whitespace so names/addresses wrapped across lines still match.
@@ -251,23 +332,91 @@ def extract_awards(text: str, fallback_date: date | None = None) -> list[AwardFa
                    or [parse_money(m.group(1)) for m in _MONEY_RE.finditer(body)]
                    or [parse_money(m.group(1)) for m in _PRICED_RE.finditer(seg)]
                    or [parse_money(m.group(1)) for m in _MONEY_RE.finditer(seg)])
-        amounts = [a for a in amounts if a >= 1]
+        rates = {parse_money(m.group(1) or m.group(2)) for m in _RATE_RE.finditer(seg)}
+        amounts = [a for a in amounts if a >= 1 and a not in rates]
+        rates = rates or set()
         title_m = _TITLE_RE.search(raw)
-        title = " ".join(title_m.group(1).split())[:240] if title_m else " ".join(seg[:160].split())
-        action, _ = _classify(_ACTION, title + " " + seg[:1500], "other")
+        title = _caps_title(raw) or (" ".join(title_m.group(1).split())[:240] if title_m else " ".join(seg[:160].split()))
+        action, _ = _classify(_ACTION, title, "")
+        whole, _ = _classify(_ACTION, title + " " + seg[:1500], "other")
+        # Generic title verbs defer to the body when it says what the money is for (a transfer funding separation pay).
+        if not action or (action in ("transfer", "contract", "other") and whole in ("payout", "settlement")):
+            action = whole
+        if action == "grant" and _PROF_CONTRACT_RE.search(title + " " + seg[:1500]):
+            action = "contract"
         procurement, proc_m = _classify(_PROCUREMENT, seg, "unknown")
         if procurement == "emergency" and not re.search(r"emergenc", title + " " + body, re.I):
             # "Emergency" only in the WHEREAS background (FEMA, Sandy…) — not an emergency procurement.
             procurement, proc_m = _classify(_PROCUREMENT[1:], seg, "unknown")
-        if not amounts and action not in ("payout", "settlement", "change_order"):
+        details: dict = {}
+        if item_no:
+            details["resolution_no"] = item_no
+        cert = _CERT_RE.search(seg) or _CERT_RE.search(" ".join(raw.split()))
+        cert_date = None
+        if cert:
+            details["meeting_type"] = cert.group(1).title()
+            cert_date = find_date(cert.group(2))
+        votes = parse_votes(seg)
+        if votes:
+            details["votes"] = votes
+        dk = _DOCKET_RE.search(seg)
+        if dk:
+            details["docket"] = dk.group(1)
+        if re.search(r"^\W*WITHDRAWN\b", raw.strip()[:40], re.I) or re.search(r"(?m)^\s*WITHDRAWN\s*$", raw[:400]):
+            details["withdrawn"] = True
+        funds = {f"{m.group(1)} {' '.join(m.group(2).split()).strip(' -–')}": parse_money(m.group(3))
+                 for m in _FUND_TOTAL_RE.finditer(seg)}
+        if funds or re.search(r"payment\s+of\s+(?:the\s+)?bills", title, re.I):
+            action = "bill_payment"
+            if funds:
+                details["funds"] = funds
+        if action == "change_order":
+            fb = _CO_FROM_BY_RE.search(body) or _CO_FROM_BY_RE.search(seg)
+            if fb:
+                details["base_amount"], amounts = parse_money(fb.group(1)), [parse_money(fb.group(2))]
+            else:
+                base = _CO_BASE_RE.search(seg)
+                if base:
+                    details["base_amount"] = parse_money(base.group(1))
+            tot = _CO_TOTAL_RE.search(seg)
+            if tot:
+                details["new_total"] = parse_money(tot.group(1))
+        rates = sorted(rates)
+        professional_appt = (action in ("contract", "purchase", "other") and _APPOINT_RE.search(title + " " + body[:800])
+                             and _PROF_ROLE_RE.search(title + " " + body[:800]))
+        if professional_appt:
+            action = "contract" if action == "other" else action
+            details["appointment"] = True
+            if rates:
+                details["hourly_rates"] = rates
+        te = _TERM_END_RE.search(body) or _TERM_END_RE.search(seg)
+        if te and action in ("contract", "purchase"):
+            d_end = find_date(te.group(1))
+            if d_end:
+                details["term_end"] = d_end.isoformat()
+        if not amounts and action not in ("payout", "settlement", "change_order") and not professional_appt:
             continue
-        if action in ("transfer", "grant", "payout", "settlement", "budget_adoption", "bond", "insurance", "employment"):
+        if action in ("transfer", "grant", "payout", "settlement", "budget_adoption", "bond", "insurance", "employment",
+                      "bill_payment", "refund"):
             procurement, proc_m = "n/a", None  # not a purchase; procurement rules don't apply
         vm = _VENDOR_ADDR_RE.search(body) or _VENDOR_ADDR_RE.search(seg)
         vendor, address = (vm.group("v").strip(" ,"), " ".join(vm.group("a").split())) if vm else (None, None)
+        pf = (_PERSON_OF_FIRM_RE.search(body) or _PERSON_OF_FIRM2_RE.search(body) or _PERSON_OF_FIRM_RE.search(seg)
+              ) if action in ("contract", "purchase") else None
+        if pf and plausible_vendor(pf.group("v")):
+            vendor, details["principal"] = pf.group("v").strip(" ,"), pf.group("p")
         if not vendor:
             vm2 = _VENDOR_RE.search(body) or _VENDOR_RE.search(seg)
             vendor = vm2.group("v").strip(" ,") if vm2 else None
+        if not vendor:
+            vm3 = _NJ_VENDOR_RE.search(body) or _NJ_VENDOR_RE.search(seg)
+            vendor = vm3.group("v").strip(" ,") if vm3 else None
+        if not vendor and title.isupper():
+            for rx in _TITLE_VENDOR_RES:
+                tm = rx.search(title)
+                if tm and plausible_vendor(tm.group("v")):
+                    vendor = tm.group("v").strip()
+                    break
         if vendor and (re.match(r"(?i)^(the\s+)?(city|town|village|borough|county|state|council|board|department)\b", vendor)
                        or not plausible_vendor(vendor)):
             vendor = None  # "with the City of …" is the counterparty, not a vendor
@@ -281,14 +430,27 @@ def extract_awards(text: str, fallback_date: date | None = None) -> list[AwardFa
         account = (am.group("c") or am.group("c2") or am.group("c3")) if am else None
         money_m = _MONEY_RE.search(body) if amounts else None
         quote = _quote(seg, money_m or proc_m or resolved)
-        if action == "transfer":
-            amount = max(amounts) if amounts else None  # from/to legs repeat the same figure
+        if action == "bill_payment" and funds:
+            amount = round(sum(funds.values()), 2)
+        elif action == "change_order" and "base_amount" in details and amounts:
+            amount = amounts[0]  # the increase, not the new total
         else:
             amount = max(amounts) if amounts else None
+        if action in ("contract", "purchase", "change_order") and procurement in ("no_bid", "professional_services", "unknown"):
+            details["p2p_disclosure"] = bool(_P2P_DISCLOSURE_RE.search(seg))
+        if action in ("contract", "purchase", "change_order"):
+            if re.search(r"non-?\s*fair\s+and\s+(?:non-?\s*)?open", seg, re.I):
+                details["non_fair_open"] = True
+            elif re.search(r"fair\s+and\s+open", seg, re.I):
+                details["fair_open"] = True
+            elif procurement in ("professional_services", "no_bid") and re.search(r"40A:11-5\s*\(\s*1\s*\)\s*\(\s*a\s*\)", seg):
+                details["non_fair_open"] = True  # LPCL professional-services exemption, no fair-and-open process recited
+            if re.search(r"\bappoint(?:ment|ed|ing)?\b|designated\s+as", title + " " + body[:600], re.I):
+                details["appointment"] = True
         out.append(AwardFact(
             item_no=item_no, page=_page_at(text, start), title=title, vendor_name=vendor, vendor_address=address,
             amount=amount, action_type=action, procurement=procurement, bids_received=bids, account_code=account,
-            meeting_date=fallback_date or find_date(seg[:400]), quote=quote,
+            meeting_date=cert_date or fallback_date or find_date(seg[:400]), quote=quote, details=details,
         ))
     return out
 
@@ -346,15 +508,44 @@ def extract_officials(text: str) -> list[OfficialFact]:
     return out
 
 
+def _caps_title(raw: str) -> str:
+    """NJ resolutions: the lines between 'RESOLUTION 054-2026' and the first WHEREAS are the title
+    (ALL-CAPS or not; may wrap and contain dashes)."""
+    m = re.search(r"(?m)^\s*RESOLUTION\s+(?:NO\.?\s*)?\d{1,4}\s*-\s*\d{2,4}\s*$", raw)
+    if not m:
+        return ""
+    lines = []
+    for line in raw[m.end():].splitlines():
+        line = line.strip()
+        if not line:
+            if lines and len(lines) >= 1 and sum(map(len, lines)) > 40:
+                continue
+            continue
+        if re.match(r"(?i)(WHEREAS|NOW,?\s|BE\s+IT|RESOLVED|Motion|##\s*Page)", line) or len(lines) >= 5:
+            break
+        lines.append(line)
+    title = " ".join(" ".join(lines).split())
+    return title[:240] if 8 <= len(title) <= 400 else ""
+
+
 def extract_all(text: str, fallback_date: date | None = None) -> Facts:
+    text = normalize(text)
     # Meeting date: the document's own date, else the first date in its header
     # ("REGULAR MEETING … held OCTOBER 7, 2025"), never a date quoted mid-resolution.
     fallback_date = fallback_date or find_date(text[:1500])
-    return Facts(
-        awards=extract_awards(text, fallback_date),
-        personnel=extract_personnel(text),
-        officials=extract_officials(text),
-    )
+    awards = extract_awards(text, fallback_date)
+    officials = extract_officials(text)
+    if not officials:
+        # NJ resolutions carry the roll call instead of a 'Present:' line.
+        seen = set()
+        for a in awards:
+            v = a.details.get("votes") or {}
+            for key in ("yes", "no", "abstain", "absent"):
+                for n in v.get(key, []):
+                    if n not in seen:
+                        seen.add(n)
+                        officials.append(OfficialFact(name=n, last_name=n.split()[-1].title(), role="Governing Body"))
+    return Facts(awards=awards, personnel=extract_personnel(text), officials=officials)
 
 
 def iter_snippets(text: str, patterns: Iterable[str], width: int = 260, limit: int = 3) -> list[tuple[int | None, str]]:

@@ -167,6 +167,7 @@ class EventsConfig(BaseModel):
 
 
 class Branding(BaseModel):
+    model_config = {"extra": "forbid"}
     app_name: str = "Civic Lens"
     tagline: str = "Document Intelligence, Events & Local Business"
     theme_color: str = "#385854"
@@ -177,6 +178,7 @@ class Branding(BaseModel):
 
 
 class Features(BaseModel):
+    model_config = {"extra": "forbid"}
     financial: bool = True
     meetings: bool = True
     events: bool = True
@@ -187,6 +189,7 @@ class Features(BaseModel):
 
 
 class CrawlPolicy(BaseModel):
+    model_config = {"extra": "forbid"}
     # Whether to obey robots.txt. Public records are public; operators decide.
     respect_robots: bool = True
     # Always identify honestly and stay polite either way.

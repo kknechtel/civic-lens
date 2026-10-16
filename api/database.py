@@ -178,6 +178,7 @@ def _migrate():
         # POST /api/documents/backfill-titles). The filename column is the
         # canonical identifier; title is the display string.
         ("documents", "title", "VARCHAR"),
+        ("integrity_awards", "details", "JSONB DEFAULT '{}'::jsonb"),
         ("documents", "doc_date", "VARCHAR"),
         # atlantic_highlands | highlands | hhrsd | regional | state — seeded
         # from metadata.source_site below, refined by services.doc_enrich.
@@ -214,6 +215,11 @@ def _migrate():
     ]
 
     with engine.connect() as conn:
+        # Every boot runs this while other processes (scraper, workers) may hold
+        # open transactions. DDL waiting on their locks also blocks every new
+        # query behind it, so fail a contended statement fast instead.
+        conn.execute(text("SET lock_timeout = '10s'"))
+
         def _table_exists(t: str) -> bool:
             return bool(conn.execute(text(
                 "SELECT 1 FROM information_schema.tables "
@@ -230,8 +236,12 @@ def _migrate():
                 "WHERE table_name = :table AND column_name = :column"
             ), {"table": table, "column": column}).fetchone()
             if not exists:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
-                logger.info(f"Added column {table}.{column}")
+                try:
+                    with conn.begin_nested():
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+                    logger.info(f"Added column {table}.{column}")
+                except Exception as e:
+                    logger.warning(f"Failed to add {table}.{column} (retried next boot): {e}")
 
         # 1b. Seed documents.municipality for rows that predate the column:
         # source id → its entity (from the municipality profile), else the
@@ -372,10 +382,15 @@ def _migrate():
                         logger.info(f"Added column users.{col}")
                     except Exception as e:
                         logger.warning(f"users.{col} add skipped: {e}")
-            try:
-                conn.execute(text("ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"))
-            except Exception:
-                pass  # already nullable
+            not_null = conn.execute(text(
+                "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' "
+                "AND column_name = 'hashed_password' AND is_nullable = 'NO'")).fetchone()
+            if not_null:  # unconditional ALTER would take an exclusive lock on users every boot
+                try:
+                    with conn.begin_nested():
+                        conn.execute(text("ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"))
+                except Exception as e:
+                    logger.warning(f"users.hashed_password DROP NOT NULL skipped: {e}")
             try:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_google_id ON users(google_id)"))
             except Exception as e:

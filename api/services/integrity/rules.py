@@ -23,6 +23,14 @@ COMPETITIVE = {"competitive_bid", "rfp", "state_contract"}
 # prior_award (amends/continues an earlier contract) is neither: growth rules cover it.
 NONCOMPETITIVE = {"professional_services", "no_bid", "sole_source", "unknown"}
 SPEND = {"contract", "purchase", "change_order", "other"}
+# Exempt from bidding by statute (NJ 40A:11-5, 40A:65; NY GML §103/§104-b/Art. 5-G), so bid-threshold
+# rules (near_threshold, split_purchases) don't apply. Professional services have their own tests below.
+BID_EXEMPT = COMPETITIVE | {"professional_services", "intergovernmental", "prior_award"}
+
+
+def _professional(a: dict) -> bool:
+    d = a.get("details") or {}
+    return a.get("procurement") == "professional_services" or bool(d.get("non_fair_open") or d.get("fair_open"))
 
 _PUBLIC_WORKS = re.compile(r"construct|reconstruct|repair|paving|install|renovat|rehabilitat|demolition|"
                            r"replace(?:ment)?\s+of|roof|sewer|water\s+main|drainage|bulkhead|boardwalk", re.I)
@@ -174,7 +182,7 @@ def near_threshold(ctx: Ctx) -> list[Flag]:
     ratio = float(ctx.cfg("near_threshold_ratio", default=0.85))
     out = []
     for a in ctx.awards:
-        if a.get("action_type") not in SPEND or a.get("procurement") in COMPETITIVE or not a.get("amount"):
+        if a.get("action_type") not in SPEND or a.get("procurement") in BID_EXEMPT or _professional(a) or not a.get("amount"):
             continue
         t = ctx.threshold(a)
         if ratio * t <= a["amount"] < t:
@@ -193,8 +201,8 @@ def near_threshold(ctx: Ctx) -> list[Flag]:
 def split_purchases(ctx: Ctx) -> list[Flag]:
     window = int(ctx.cfg("split_window_days", default=90))
     out = []
-    groups = _by_vendor(ctx.awards, lambda a: a.get("action_type") in SPEND and a.get("procurement") not in COMPETITIVE
-                        and a.get("amount") and a.get("meeting_date"))
+    groups = _by_vendor(ctx.awards, lambda a: a.get("action_type") in SPEND and a.get("procurement") not in BID_EXEMPT
+                        and not _professional(a) and a.get("amount") and a.get("meeting_date"))
     for (entity, vnorm), g in groups.items():
         used = set()
         for i, a in enumerate(g):
@@ -240,6 +248,52 @@ def emergency_procurement(ctx: Ctx) -> list[Flag]:
     return out
 
 
+_PROJECT_STOP = set("""a an the of for to and in on at by with from as is be this that improvements improvement repair repairs
+emergency temporary contract award awarding awarded authorizing authorize resolution services service engineering
+professional borough city town village county municipal project phase road street avenue ave rd st program""".split())
+
+
+def _project_words(a: dict) -> set[str]:
+    words = re.findall(r"[a-z][a-z'’]{2,}", (a.get("title") or "").lower())
+    return {w for w in words if w not in _PROJECT_STOP}
+
+
+def emergency_after_planning(ctx: Ctx) -> list[Flag]:
+    """An 'emergency' award for a project the governing body had already been
+    planning or engineering weeks earlier — the condition was known in time to
+    get quotes or bid."""
+    min_gap = int(ctx.cfg("emergency", "planning_gap_days", default=30))
+    out = []
+    for e in ctx.awards:
+        if e.get("procurement") != "emergency" or not e.get("meeting_date"):
+            continue
+        ew = _project_words(e)
+        if len(ew) < 2:
+            continue
+        prior = [a for a in ctx.awards if a is not e and a.get("meeting_date") and a.get("entity_key") == e.get("entity_key")
+                 and timedelta(days=min_gap) <= e["meeting_date"] - a["meeting_date"] <= timedelta(days=730)
+                 and len(ew & _project_words(a)) >= 2]
+        if not prior:
+            continue
+        first = min(prior, key=lambda a: a["meeting_date"])
+        gap = (e["meeting_date"] - first["meeting_date"]).days
+        rng = (e.get("details") or {}).get("date_range") if (e.get("details") or {}).get("date_estimated") else None
+        est = (f" at the earliest — the posted resolution is undated, numbered between actions of {rng[0]} and {rng[1]}"
+               if rng else "")
+        out.append(Flag(
+            "emergency_after_planning", "high" if gap >= 45 else "medium",
+            f"Emergency award of {_money(e.get('amount'))} to {e.get('vendor_name') or 'unnamed vendor'} "
+            f"{'≥' if rng else '~'}{gap} days after the same project was already in the record",
+            f"\"{first.get('title')}\" was acted on {first['meeting_date']}; the emergency award came {gap} days later{est}. "
+            f"Emergency procurement{ctx.cite('emergency')} is for conditions that can't wait for quotes or bids. A "
+            "condition already being studied or designed weeks earlier usually could. Check the emergency certification, "
+            "how many quotes were sought, and whether the vendor does this kind of work.",
+            e.get("vendor_name"), e.get("entity_key"), e.get("amount"), [_ev(ctx, first)] + [_ev(ctx, a) for a in prior if a is not first][:4] + [_ev(ctx, e)],
+            score=4 + gap / 30, scope=f"{e.get('vendor_norm')}:{e.get('amount')}",
+        ))
+    return out
+
+
 def noncompetitive_concentration(ctx: Ctx) -> list[Flag]:
     months = int(ctx.cfg("concentration_months", default=24))
     min_count = int(ctx.cfg("concentration_min_awards", default=3))
@@ -247,7 +301,8 @@ def noncompetitive_concentration(ctx: Ctx) -> list[Flag]:
     groups = _by_vendor(ctx.awards, lambda a: a.get("action_type") in SPEND and a.get("procurement") in NONCOMPETITIVE)
     for (entity, vnorm), g in groups.items():
         latest = max((a.get("meeting_date") or date.min) for a in g)
-        recent = [a for a in g if (a.get("meeting_date") or date.min) >= latest - timedelta(days=30 * months)]
+        cutoff = latest - timedelta(days=30 * months) if latest > date.min + timedelta(days=30 * months) else date.min
+        recent = [a for a in g if (a.get("meeting_date") or date.min) >= cutoff]
         total = sum(a.get("amount") or 0 for a in recent)
         t = ctx.threshold(recent[0]) if recent else 35000
         if len(recent) >= min_count or total >= 3 * t:
@@ -337,14 +392,22 @@ def payouts(ctx: Ctx) -> list[Flag]:
 
 
 def change_order_growth(ctx: Ctx) -> list[Flag]:
+    """Cumulative change orders vs. the original award. NJ change-order resolutions
+    state the original amount themselves (details.base_amount); prefer that over
+    guessing the base from the vendor's largest award."""
     cap = float(ctx.cfg("change_order", "cap_pct", default=20))
     out = []
     groups = _by_vendor(ctx.awards, lambda a: a.get("action_type") in ("contract", "purchase", "change_order"))
     for (entity, vnorm), g in groups.items():
-        base = max((a.get("amount") or 0 for a in g if a["action_type"] != "change_order"), default=0)
         cos = [a for a in g if a["action_type"] == "change_order"]
+        if not cos:
+            continue
+        stated = [(a.get("details") or {}).get("base_amount") for a in cos]
+        stated = [b for b in stated if b]
+        base = min(stated) if stated else max(
+            (a.get("amount") or 0 for a in g if a["action_type"] != "change_order"), default=0)
         added = sum(a.get("amount") or 0 for a in cos)
-        if base and cos and added / base * 100 > cap:
+        if base and added / base * 100 > cap:
             pct = added / base * 100
             out.append(Flag(
                 "change_order_growth", "high" if pct > 2 * cap else "medium",
@@ -501,10 +564,220 @@ def payments_over_threshold(ctx: Ctx) -> list[Flag]:
     return out
 
 
+# ── NJ-specific (enabled by the state's integrity config) ────────────────────
+
+def _master_for(ctx: Ctx, a: dict) -> dict | None:
+    """The vendor's term appointment/NFO contract with a disclosure on file that
+    covers this award's date (project awards are often task orders under it)."""
+    when = a.get("meeting_date")
+    if not when or not a.get("vendor_norm"):
+        return None
+    for m in ctx.awards:
+        d = m.get("details") or {}
+        if (m is a or m.get("vendor_norm") != a["vendor_norm"] or m.get("entity_key") != a.get("entity_key")
+                or not d.get("p2p_disclosure") or not m.get("meeting_date")):
+            continue
+        end = date.fromisoformat(d["term_end"]) if d.get("term_end") else date(m["meeting_date"].year, 12, 31)
+        if m["meeting_date"] <= when <= end:
+            return m
+    return None
+
+
+def nfo_missing_disclosure(ctx: Ctx) -> list[Flag]:
+    """A non-fair-and-open contract over the pay-to-play threshold with no
+    Business Entity Disclosure / 19:44A-20.5 language in the resolution."""
+    if not ctx.cfg("pay_to_play", "statutory", default=False):
+        return []
+    limit = float(ctx.cfg("pay_to_play", "contract_threshold", default=17500))
+    out = []
+    for a in ctx.awards:
+        d = a.get("details") or {}
+        if (d.get("p2p_disclosure") is False and a.get("action_type") in SPEND
+                and d.get("non_fair_open") and (a.get("amount") or 0) > limit and not _master_for(ctx, a)):
+            out.append(Flag(
+                "nfo_missing_disclosure", "medium",
+                f"Non-fair-and-open award to {a.get('vendor_name') or 'unnamed vendor'}, {_money(a.get('amount'))}, "
+                "with no pay-to-play disclosure cited",
+                f"Contracts over {_money(limit)} awarded outside a fair-and-open process require the vendor's "
+                f"Business Entity Disclosure Certification and a political-contribution certification{ctx.cite('pay_to_play')}. "
+                "The resolution text doesn't reference them. The forms may be on file anyway; request them by OPRA.",
+                a.get("vendor_name"), a.get("entity_key"), a.get("amount"), [_ev(ctx, a)],
+                score=(a.get("amount") or 0) / limit, scope=f"{d.get('resolution_no')}:{a.get('amount')}",
+            ))
+    return out
+
+
+def p2p_threshold_split(ctx: Ctx) -> list[Flag]:
+    """Non-fair-and-open awards to one vendor, each at or under the pay-to-play
+    contract threshold, that together exceed it within a year. Keeping every piece
+    under $17,500 keeps the vendor out of the contribution ban."""
+    if not ctx.cfg("pay_to_play", "statutory", default=False):
+        return []
+    limit = float(ctx.cfg("pay_to_play", "contract_threshold", default=17500))
+    groups = _by_vendor(ctx.awards, lambda a: a.get("action_type") in SPEND and a.get("amount") and a.get("meeting_date")
+                        and (a.get("details") or {}).get("non_fair_open"))
+    out = []
+    for (entity, vnorm), g in groups.items():
+        used: set[int] = set()
+        for i, a in enumerate(g):
+            if i in used or a["amount"] > limit:
+                continue
+            cluster = [j for j in range(i, len(g)) if j not in used and g[j]["amount"] <= limit
+                       and g[j]["meeting_date"] - a["meeting_date"] <= timedelta(days=365)]
+            total = sum(g[j]["amount"] for j in cluster)
+            if len(cluster) < 2 or total <= limit:
+                continue
+            used.update(cluster)
+            items = [g[j] for j in cluster]
+            same_night = len({x["meeting_date"] for x in items}) < len(items)
+            undisclosed = [x for x in items if (x.get("details") or {}).get("p2p_disclosure") is False
+                           and not _master_for(ctx, x)]
+            out.append(Flag(
+                "p2p_threshold_split", ("high" if same_night else "medium") if undisclosed else "low",
+                f"{len(items)} non-fair-and-open awards to {_vendor_label(items)}, each ≤ {_money(limit)}, totalling {_money(total)}"
+                + (" — some on the same night" if same_night else ""),
+                f"Contracts over {_money(limit)} awarded without a fair-and-open process trigger the pay-to-play "
+                f"contribution ban and disclosure{ctx.cite('pay_to_play')}. Several pieces under the line for the same "
+                "vendor and the same kind of work can be a way around it. Get the vendor's ELEC filings and the "
+                "certifications on file, and check whether the work was one engagement."
+                + ("" if undisclosed else " A term contract with a disclosure on file covers these dates, which lowers the "
+                   "concern; the aggregate still counts toward the vendor's annual ELEC disclosure."),
+                _vendor_label(items), entity, total, [_ev(ctx, x) for x in items],
+                score=total / limit + same_night, scope=str(a["meeting_date"]),
+            ))
+    return out
+
+
+def successor_firm_nfo(ctx: Ctx) -> list[Flag]:
+    """A professional appointed through a competitive/fair-and-open process changes
+    firms mid-term, and the new firm gets a non-fair-and-open contract to keep them.
+    The competition was for the old firm's proposal; the new firm never competed."""
+    def last(n):
+        return (n or "").split()[-1].lower() if n else ""
+    appts = [a for a in ctx.awards if (a.get("details") or {}).get("principal") and a.get("meeting_date")]
+    out = []
+    for b in appts:
+        db = b.get("details") or {}
+        if not db.get("non_fair_open"):
+            continue
+        for a in appts:
+            da = a.get("details") or {}
+            if (a is b or last(da["principal"]) != last(db["principal"]) or a.get("vendor_norm") == b.get("vendor_norm")
+                    or a["meeting_date"] >= b["meeting_date"] or a.get("entity_key") != b.get("entity_key")):
+                continue
+            later = [x for x in ctx.awards if x.get("vendor_norm") == b.get("vendor_norm") and x is not b
+                     and x.get("meeting_date") and x["meeting_date"] > b["meeting_date"]]
+            added = sum(x.get("amount") or 0 for x in later)
+            out.append(Flag(
+                "successor_firm_nfo", "medium",
+                f"{db['principal']} moved from {a.get('vendor_name') or 'prior firm'} to {b.get('vendor_name')}; "
+                f"new firm got a non-fair-and-open contract" + (f", then {_money(added)} more in {len(later)} award(s)" if later else ""),
+                f"{a.get('vendor_name') or 'The prior firm'} won the appointment"
+                f"{' through a fair-and-open process' if da.get('fair_open') else ''} on {a['meeting_date']}. When "
+                f"{db['principal']} changed firms the governing body awarded {b.get('vendor_name')} a non-fair-and-open "
+                f"contract{' through ' + db['term_end'] if db.get('term_end') else ''}, so the new firm never competed. "
+                "Usually done for continuity and often legal, but it removes the competitive check for the rest of the term. "
+                "Check the vote, the new firm's ELEC history and whether the work volume grew after the switch.",
+                b.get("vendor_name"), b.get("entity_key"), added or None,
+                [_ev(ctx, a), _ev(ctx, b)] + [_ev(ctx, x) for x in later[:8]],
+                score=3 + added / 50000, scope=f"{a.get('vendor_norm')}>{b.get('vendor_norm')}",
+            ))
+            break
+    return out
+
+
+def elec_annual_disclosure(ctx: Ctx) -> list[Flag]:
+    """Vendors receiving more than the annual threshold in public contracts must
+    file an annual Business Entity Disclosure with ELEC — a check anyone can run."""
+    if not ctx.cfg("pay_to_play", "statutory", default=False):
+        return []
+    limit = float(ctx.cfg("pay_to_play", "annual_disclosure_threshold", default=50000))
+    by_year: dict[tuple, list[dict]] = defaultdict(list)
+    for a in ctx.awards:
+        if a.get("action_type") in SPEND and a.get("vendor_norm") and a.get("meeting_date") and a.get("amount"):
+            by_year[(a.get("entity_key"), a["vendor_norm"], a["meeting_date"].year)].append(a)
+    out = []
+    for (entity, vnorm, yr), g in by_year.items():
+        total = sum(a["amount"] for a in g)
+        nfo = [a for a in g if (a.get("details") or {}).get("non_fair_open")]
+        if total > limit and nfo:
+            out.append(Flag(
+                "elec_annual_disclosure", "low",
+                f"{_vendor_label(g)}: {_money(total)} in {yr} awards ({len(nfo)} non-fair-and-open) — confirm ELEC annual disclosure",
+                f"A business entity receiving more than {_money(limit)} in public contracts in a year must file an annual "
+                "disclosure of its political contributions with ELEC (N.J.S.A. 19:44A-20.27, Form B-1). Search ELEC's "
+                "business-entity filings for this vendor and year, and compare its contributions with the officials who voted.",
+                _vendor_label(g), entity, total, [_ev(ctx, a) for a in g[:10]], score=total / limit, scope=str(yr),
+            ))
+    return out
+
+
+def professional_tenure(ctx: Ctx) -> list[Flag]:
+    """The same professional reappointed without competition year after year at
+    reorganization. Legal, but entrenched no-bid relationships are where
+    pay-to-play lives — pair with contribution data."""
+    min_years = int(ctx.cfg("tenure_min_years", default=4))
+    def professional(a: dict) -> bool:
+        d = a.get("details") or {}
+        return bool(a.get("meeting_date")) and a.get("action_type") in ("contract", "purchase") and (
+            a.get("procurement") in ("professional_services", "no_bid")
+            or d.get("appointment") or d.get("fair_open") or d.get("non_fair_open"))
+    groups = _by_vendor(ctx.awards, professional)
+    out = []
+    for (entity, vnorm), g in groups.items():
+        years = sorted({a["meeting_date"].year for a in g})
+        if len(years) < min_years:
+            continue
+        nfo = [a for a in g if (a.get("details") or {}).get("non_fair_open")]
+        total = sum(a.get("amount") or 0 for a in g)
+        out.append(Flag(
+            "professional_tenure", "medium" if nfo else "low",
+            f"{_vendor_label(g)}: appointed {len(years)} years running ({years[0]}–{years[-1]})"
+            + (f", {len(nfo)}× non-fair-and-open" if nfo else ""),
+            "Professional appointments are exempt from bidding. A 'fair and open' RFQ whose criteria the same firm "
+            "wins every January, or a run of non-fair-and-open awards, means the price has never really been "
+            "market-tested. Compare the RFQ responses and cross-reference ELEC contributions from the firm and its principals.",
+            _vendor_label(g), entity, total or None, [_ev(ctx, a) for a in g[-8:]],
+            score=len(years) + len(nfo) / 2, scope="tenure",
+        ))
+    return out
+
+
+def bill_list_spike(ctx: Ctx) -> list[Flag]:
+    """A Payment-of-Bills resolution far above the entity's median — money moved
+    in one vote with the detail usually in an unpublished attachment."""
+    mult = float(ctx.cfg("bill_spike_multiple", default=3))
+    bills = [a for a in ctx.awards if a.get("action_type") == "bill_payment" and a.get("amount")]
+    out = []
+    by_entity: dict = defaultdict(list)
+    for a in bills:
+        by_entity[a.get("entity_key")].append(a)
+    for entity, g in by_entity.items():
+        if len(g) < 8:
+            continue
+        amts = sorted(a["amount"] for a in g)
+        med = amts[len(amts) // 2]
+        for a in g:
+            if a["amount"] >= mult * med:
+                funds = (a.get("details") or {}).get("funds") or {}
+                top = max(funds.items(), key=lambda kv: kv[1] or 0)[0] if funds else None
+                out.append(Flag(
+                    "bill_list_spike", "low",
+                    f"Bill list of {_money(a['amount'])} on {a.get('meeting_date')} — {a['amount'] / med:.1f}× the median",
+                    f"The median bill list here is {_money(med)}. Large lists are often debt service, school or county "
+                    "tax remittances, or capital draws" + (f" (largest fund: {top})" if top else "") + ". Pull the "
+                    "itemized bill list — it's rarely posted with the resolution — and check the big lines.",
+                    None, entity, a["amount"], [_ev(ctx, a)], score=a["amount"] / med,
+                    scope=f"{a.get('meeting_date')}:{a['amount']}",
+                ))
+    return out
+
+
 RULES: dict[str, Callable[[Ctx], list[Flag]]] = {
     "near_threshold": near_threshold,
     "split_purchases": split_purchases,
     "emergency_procurement": emergency_procurement,
+    "emergency_after_planning": emergency_after_planning,
     "noncompetitive_concentration": noncompetitive_concentration,
     "single_bid": single_bid,
     "duplicate_award": duplicate_award,
@@ -514,6 +787,12 @@ RULES: dict[str, Callable[[Ctx], list[Flag]]] = {
     "pay_to_play": pay_to_play,
     "oversight_findings": oversight_findings,
     "payments_over_threshold": payments_over_threshold,
+    "nfo_missing_disclosure": nfo_missing_disclosure,
+    "p2p_threshold_split": p2p_threshold_split,
+    "successor_firm_nfo": successor_firm_nfo,
+    "elec_annual_disclosure": elec_annual_disclosure,
+    "professional_tenure": professional_tenure,
+    "bill_list_spike": bill_list_spike,
 }
 
 

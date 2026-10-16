@@ -60,6 +60,24 @@ def test_opt_out_skips_robots():
     assert s.robots_allows("https://www.longbeachny.gov/councilmeetings")
 
 
+def test_legacy_crawlers_inherit_crawl_policy(monkeypatch):
+    """A legacy crawler's own scraper must follow the deployment's respect_robots: false."""
+    from municipality import load_deployment
+    from services.scraper import crawlers
+    from services.sources.registry import build_adapter
+
+    class Fake:
+        def __init__(self):
+            self.basic = BasicScraper()
+        def find_documents(self):
+            return [{"respect": self.basic.respect_robots}]
+
+    monkeypatch.setattr(crawlers, "FakeCrawler", Fake, raising=False)
+    muni = load_deployment("atlantic-highlands-nj")  # inherits respect_robots: false from NJ
+    src = muni.source("ahnj").model_copy(update={"params": {"class": "FakeCrawler"}})
+    assert build_adapter(src, muni).discover() == [{"respect": False}]
+
+
 # ── OCR limits ──────────────────────────────────────────────────────────────
 
 def test_page_zoom_caps_giant_pages():

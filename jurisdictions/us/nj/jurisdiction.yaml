@@ -78,4 +78,5 @@ integrity:
     window_days: 365
     contribution_threshold: 300
     contract_threshold: 17500
+    annual_disclosure_threshold: 50000  # N.J.S.A. 19:44A-20.27 — ELEC Form B-1
     citation: N.J.S.A. 19:44A-20.4 et seq. (local pay-to-play) — contributions over $300 in the prior year bar a non-fair-and-open contract over $17,500; local ordinances may be stricter

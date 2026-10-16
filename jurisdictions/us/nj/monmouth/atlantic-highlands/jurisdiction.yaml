@@ -20,6 +20,8 @@ branding:
   public_origin: https://ahnj.info
   banner_url: /dashboard-banner.jpg
   banner_alt: Sunset over Raritan Bay from Atlantic Highlands
+crawl:
+  min_delay_seconds: 1.0
 entities:
 - key: atlantic_highlands
   label: Borough of Atlantic Highlands
@@ -113,14 +115,21 @@ sources:
   params:
     class: AHNJCrawler
 - id: ecode360
-  description: Document archive — Agendas, Minutes, Resolutions, Legislation, Budgets
-  note: Cloudflare Turnstile protected — requires a browser. Currently skipped on the server (no Chrome installed);
-    results will show 0 found.
+  description: eCode360 public documents — every resolution, council minutes and agendas, budgets, legislation
+  note: Behind Cloudflare; fetched with headless Chromium (Playwright), downloads reuse its clearance cookie.
   label: ecode360.com
   adapter: ecode360
   entity: atlantic_highlands
   params:
     customer: AT0153
+    categories:
+      Resolutions: resolution
+      Minutes: minutes
+      Agendas: agenda
+      Budgets: budget
+      Legislation: ordinance
+      Misc._Documents: null
+      Comprehensive_Plans: planning
 - id: tridistrict
   description: HHRSD + AHES + HES + HHRS — BOE Agendas/Minutes, Budget, Curriculum, Performance Reports
   label: tridistrict.org

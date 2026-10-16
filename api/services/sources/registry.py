@@ -12,37 +12,8 @@ from municipality import Municipality, Source, get_municipality
 
 from .base import SourceAdapter
 from .feeds import RssAdapter, SitemapAdapter, YouTubeChannelAdapter
+from .browser import Ecode360Adapter
 from .html_index import HtmlIndexAdapter
-
-
-class Ecode360Adapter(SourceAdapter):
-    """General Code eCode360 document library.
-
-    params:
-      customer: eCode360 customer code, e.g. "AT0153"
-      categories: ["Agendas", "Minutes", ...]  (default: the common set)
-
-    eCode360 sits behind Cloudflare Turnstile, so this needs the Selenium
-    stealth driver (a real Chrome). Without it the adapter logs and returns [].
-    """
-    name = "ecode360"
-    DEFAULT_CATEGORIES = ["Agendas", "Budgets", "Comprehensive_Plans", "Legislation",
-                          "Minutes", "Misc._Documents", "Resolutions"]
-
-    def discover(self) -> list[dict]:
-        from services.scraper import crawlers
-
-        customer = self.params.get("customer")
-        if not customer:
-            raise ValueError(f"{self.source.id}: ecode360 needs params.customer")
-        crawler = crawlers.ECode360Crawler()
-        crawler.CATEGORIES = [f"/{customer}/documents/{c}"
-                              for c in self.params.get("categories", self.DEFAULT_CATEGORIES)]
-        docs = crawler.find_documents()
-        for d in docs:
-            d.pop("category", None)  # eCode360 folder name, not our town/school category
-        self._tick(len(docs))
-        return docs
 
 
 class LegacyCrawlerAdapter(SourceAdapter):
@@ -63,6 +34,8 @@ class LegacyCrawlerAdapter(SourceAdapter):
         crawler.historical = self.historical
         crawler.progress_callback = self.progress_callback
         if getattr(crawler, "basic", None) is not None:
+            # Legacy crawlers build their own scraper; apply the deployment's crawl policy to it too.
+            crawler.basic.respect_robots = crawler.basic.respect_robots and self.municipality.respects_robots(self.source)
             self.basic = crawler.basic  # so the runner harvests its connect errors
         return crawler.find_documents()
 

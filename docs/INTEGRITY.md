@@ -71,6 +71,14 @@ quote it came from.
 | `change_order_growth` | Change orders more than 20% over the original award | N.J.A.C. 5:30-11 |
 | `official_surname_hire` | A hire shares an *uncommon* surname with a sitting official | |
 | `pay_to_play` | Vendor or its people contributed within 365 days before an award | N.J.S.A. 19:44A-20.4 et seq. (statutory in NJ) |
+| `payments_over_threshold` | Bill-list payments to one vendor in a fiscal year above the bid threshold with no competitive award on record | N.J.S.A. 40A:11-3 (aggregation) |
+| `emergency_after_planning` | An "emergency" award for a project already studied/engineered ≥30 days earlier (undated resolutions dated from their numbering, as a lower bound) | N.J.S.A. 40A:11-6, N.J.A.C. 5:34-6 |
+| `nfo_missing_disclosure` | Non-fair-and-open award over $17,500 whose resolution cites no Business Entity Disclosure, and no term contract with one on file covers it | N.J.S.A. 19:44A-20.5 |
+| `p2p_threshold_split` | Several non-fair-and-open awards to one vendor, each ≤ $17,500, together over it within a year | same |
+| `successor_firm_nfo` | A professional appointed competitively changes firms mid-term and the new firm gets a non-fair-and-open contract | N.J.S.A. 19:44A-20.4–.7 |
+| `elec_annual_disclosure` | A vendor over $50,000 in a year including non-fair-and-open awards: check its ELEC Form B-1 | N.J.S.A. 19:44A-20.27 |
+| `professional_tenure` | Same professional appointed ≥4 years running | |
+| `bill_list_spike` | A Payment-of-Bills resolution ≥3× the median | |
 | `oversight_findings` | Adverse language in audits and State Comptroller reports ("significant fiscal stress", "did not comply", "unsupported", repeat findings…) | |
 
 **Review.** Flags are stored with a stable fingerprint, so a reviewer's
@@ -207,7 +215,7 @@ volunteers, one town at a time.
 
 | Phase | Deliverable | Done when |
 |---|---|---|
-| 0 (now) | Jurisdiction tree, 11 rules, review workflow, Long Beach test deployment | Long Beach flags reviewed by a human; false-positive rate measured |
+| 0 (now) | Jurisdiction tree, 20 rules (NJ resolution formats calibrated on Atlantic Highlands), review workflow, Long Beach test deployment | Long Beach flags reviewed by a human; false-positive rate measured |
 | 1 | NJ bill-list parser; ELEC import (contributions and Form BE); reorganization-appointment extractor; FDS import | Atlantic Highlands and 5 Monmouth towns running on the full NJ pack |
 | 2 | Entity graph (vendors ↔ principals ↔ donors ↔ officials ↔ addresses) using NY DOS and NJ registries; land-use and PILOT parsers | Cross-town vendor pages; county-level deployment for Monmouth |
 | 3 | Statewide NJ deployment from templates; public facts dataset; peer benchmarks; OPRA/FOIL gap automation | All 564 NJ municipalities have budget, audit and ELEC coverage |

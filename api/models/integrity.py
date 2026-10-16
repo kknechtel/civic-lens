@@ -40,6 +40,9 @@ class Award(Base):
     bids_received = Column(Integer)
     account_code = Column(String)
     quote = Column(Text)  # evidence excerpt
+    # base_amount/new_total (change orders), funds (bill lists), p2p_disclosure,
+    # meeting_type, votes, withdrawn …
+    details = Column(JSONB, default=dict)
     extracted_by = Column(String, default="rules")
     created_at = Column(DateTime, default=datetime.utcnow)
 

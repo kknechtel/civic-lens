@@ -352,3 +352,151 @@ def test_canonical_vendors_transitive_and_deterministic():
     for order in (names, list(reversed(names))):
         c = canonical_vendors(order)
         assert len(set(c.values())) == 1 and c["thomas novelli"] == "thomas novelli contracting"
+
+
+# ── NJ resolution formats (real Atlantic Highlands 2026 resolutions) ──────────
+
+def _ah(name):
+    facts = extract_all((FIXTURES / "ah" / f"{name}.txt").read_text())
+    assert len(facts.awards) == 1
+    return facts, facts.awards[0]
+
+
+def test_ah_payment_of_bills_sums_funds():
+    facts, a = _ah("bills")
+    assert a.action_type == "bill_payment" and a.procurement == "n/a"
+    assert a.amount == pytest.approx(1_589_422.32)
+    assert a.details["funds"]["01 CURRENT FUND"] == pytest.approx(1_208_775.32)
+    assert a.details["funds"]["30 HARBOR"] == pytest.approx(283_114.12)
+    assert a.details["votes"]["moved"] == "Crowley" and len(a.details["votes"]["yes"]) == 6
+    assert {o.name for o in facts.officials} >= {"Crowley", "Scatassa"}  # roll call, no Present: line
+
+
+def test_ah_non_fair_and_open_contract():
+    _, a = _ah("nfo")
+    assert a.vendor_name.lower() == "the aubrey group"
+    assert a.amount == 30_000 and a.action_type == "contract" and a.procurement == "no_bid"
+    assert a.details["non_fair_open"] and a.details["p2p_disclosure"]
+    assert a.details["meeting_type"] == "Reorganization" and a.meeting_date == date(2026, 1, 1)
+    assert a.title.startswith("AUTHORIZING A NON-FAIR AND OPEN")
+
+
+def test_ah_fair_and_open_appointment():
+    _, a = _ah("attorney")
+    assert a.vendor_name.startswith("Marguerite M. Schaffer")
+    assert a.amount == 35_000 and a.procurement == "rfp"
+    assert a.details["fair_open"] and a.details["appointment"]
+
+
+def test_ah_change_order_increase_not_total():
+    _, a = _ah("change_order")
+    assert a.vendor_name == "FIORE PAVING" and a.action_type == "change_order"
+    assert a.amount == pytest.approx(4_917.82)
+    assert a.details["base_amount"] == pytest.approx(367_617.75)
+    assert a.details["new_total"] == pytest.approx(372_533.57)
+
+
+def _nj_award(**kw):
+    base = {"document_id": "d", "entity_key": "ah", "vendor_name": "Acme Law", "vendor_norm": "acme law",
+            "action_type": "contract", "procurement": "no_bid", "amount": 40000, "meeting_date": date(2026, 1, 1),
+            "details": {}}
+    base.update(kw)
+    return base
+
+
+def test_change_order_growth_uses_stated_base():
+    awards = [_nj_award(action_type="change_order", amount=90000, details={"base_amount": 300000}),
+              _nj_award(action_type="contract", amount=50000)]  # a smaller unrelated award must not be the base
+    flags = run_rules(Ctx(awards=awards, config=NJ_P2P), only=["change_order_growth"])
+    assert len(flags) == 1 and "30%" in flags[0].title
+
+
+def test_nfo_missing_disclosure():
+    ok = _nj_award(details={"non_fair_open": True, "p2p_disclosure": True})
+    bad = _nj_award(vendor_norm="b", details={"non_fair_open": True, "p2p_disclosure": False})
+    small = _nj_award(vendor_norm="c", amount=9000, details={"non_fair_open": True, "p2p_disclosure": False})
+    flags = run_rules(Ctx(awards=[ok, bad, small], config=NJ_P2P), only=["nfo_missing_disclosure"])
+    assert [f.subject for f in flags] == ["Acme Law"] and flags[0].amount == 40000
+    assert not run_rules(Ctx(awards=[bad], config=NY), only=["nfo_missing_disclosure"])
+
+
+def test_professional_tenure():
+    awards = [_nj_award(meeting_date=date(y, 1, 1), details={"appointment": True, "non_fair_open": y > 2023})
+              for y in range(2021, 2027)]
+    flags = run_rules(Ctx(awards=awards, config=NJ_P2P), only=["professional_tenure"])
+    assert len(flags) == 1 and "6 years running" in flags[0].title and flags[0].severity == "medium"
+    assert not run_rules(Ctx(awards=awards[:3], config=NJ_P2P), only=["professional_tenure"])
+
+
+def test_bill_list_spike():
+    awards = [_nj_award(action_type="bill_payment", procurement="n/a", amount=100000 + i, vendor_norm=None,
+                        meeting_date=date(2025, 1 + i, 1)) for i in range(10)]
+    awards.append(_nj_award(action_type="bill_payment", procurement="n/a", amount=900000, vendor_norm=None,
+                            meeting_date=date(2025, 12, 1), details={"funds": {"01 CURRENT FUND": 900000}}))
+    flags = run_rules(Ctx(awards=awards, config=NJ_P2P), only=["bill_list_spike"])
+    assert len(flags) == 1 and flags[0].amount == 900000
+
+
+def test_rules_tolerate_undated_awards():
+    awards = [_nj_award(meeting_date=None, amount=200000) for _ in range(3)]
+    assert run_rules(Ctx(awards=awards, config=NJ_P2P))  # no OverflowError on date.min
+
+
+def test_p2p_threshold_split_and_professional_exempt_from_bid_split():
+    nfo = {"non_fair_open": True, "p2p_disclosure": False}
+    awards = [_nj_award(amount=5000, meeting_date=date(2026, 2, 2), details=nfo),
+              _nj_award(amount=10000, meeting_date=date(2026, 2, 2), details=nfo),
+              _nj_award(amount=5000, meeting_date=date(2026, 5, 4), details=nfo),
+              _nj_award(amount=40000, meeting_date=date(2026, 6, 15), details=nfo)]
+    flags = run_rules(Ctx(awards=awards, config=NJ_P2P))
+    rules = {f.rule for f in flags}
+    assert "p2p_threshold_split" in rules and "split_purchases" not in rules and "near_threshold" not in rules
+    split = next(f for f in flags if f.rule == "p2p_threshold_split")
+    assert split.severity == "high" and split.amount == 20000  # the $40k award is over the line, not part of the split
+    assert "nfo_missing_disclosure" in rules  # the $40k one
+
+
+def test_nj_budget_mechanics_are_not_spending():
+    from services.integrity.extract import extract_awards
+    text = ("RESOLUTION 073-2018\nEMERGENCY TEMPORARY APPROPRIATION\nWHEREAS, an emergency condition has arisen ... "
+            "NOW, THEREFORE, BE IT RESOLVED that an emergency temporary appropriation be made in the amount of $806,345.00")
+    (a,) = extract_awards(text)
+    assert a.action_type == "budget_adoption" and a.procurement == "n/a"
+
+
+def test_successor_firm_and_master_coverage_from_real_resolutions():
+    """CME's fair-and-open engineer (2025-004) moves to Colliers, which gets an NFO (2025-087)."""
+    facts = [extract_all((FIXTURES / "ah" / f"{n}.txt").read_text()).awards[0] for n in ("engineer_2025", "nfo_engineer_2025")]
+    from services.integrity.extract import norm_name
+    awards = [{**{k: getattr(a, k) for k in ("vendor_name", "amount", "action_type", "procurement", "meeting_date", "details")},
+               "vendor_norm": norm_name(a.vendor_name), "entity_key": "ah", "document_id": n}
+              for n, a in enumerate(facts)]
+    awards.append(_nj_award(vendor_name="Colliers Engineering & Design", vendor_norm=norm_name("Colliers Engineering & Design"),
+                            amount=40000, meeting_date=date(2026, 6, 15),
+                            details={"non_fair_open": True, "p2p_disclosure": False}))
+    flags = run_rules(Ctx(awards=awards, config=NJ_P2P))
+    by_rule = {f.rule: f for f in flags}
+    s = by_rule["successor_firm_nfo"]
+    assert "Rohmeyer" in s.title and "CME Associates" in s.title and s.amount == 40000
+    assert "nfo_missing_disclosure" not in by_rule  # covered by 2025-087's disclosure through 2027-12-31
+
+
+def test_emergency_after_planning_on_real_resolutions():
+    """2025-036 engineered 'emergency temporary repairs' to the Upper Prospect wall in February;
+    2025-068 (undated, numbered after 061 of March 17) awarded the 'emergency' work."""
+    from services.integrity.extract import norm_name
+    from services.integrity.runner import estimate_dates_from_numbering
+    awards = []
+    for n in ("wall_engineering", "sewer_emergency", "wall_emergency"):
+        (a,) = extract_all((FIXTURES / "ah" / f"{n}.txt").read_text()).awards
+        awards.append({**{k: getattr(a, k) for k in ("title", "vendor_name", "amount", "action_type", "procurement",
+                                                     "meeting_date", "details")},
+                       "vendor_norm": norm_name(a.vendor_name), "entity_key": "ah", "document_id": n})
+    wall = awards[2]
+    assert wall["meeting_date"] is None and wall["procurement"] == "emergency" and wall["amount"] == 237000
+    awards.append(_nj_award(meeting_date=date(2025, 5, 19), details={"resolution_no": "087-2025"}))
+    estimate_dates_from_numbering(awards)
+    assert wall["meeting_date"] == date(2025, 3, 17) and wall["details"]["date_estimated"]
+    flags = run_rules(Ctx(awards=awards, config=NJ_P2P), only=["emergency_after_planning"])
+    assert len(flags) == 1 and flags[0].severity == "medium" and "≥42 days" in flags[0].title  # lower bound
+    assert flags[0].evidence[0]["document_id"] == "wall_engineering"
