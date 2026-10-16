@@ -11,7 +11,7 @@ before `ah-api` ever is.
 | Config | `/etc/long-beach.env` (created by `setup.sh`; root, 600) |
 | API | `lb-api.service` → 127.0.0.1:8102 (≤700 MB) |
 | Web | `lb-web.service` → 127.0.0.1:3102 (≤400 MB) |
-| Database | `civiclens_lb` on the existing RDS instance |
+| Database | `civiclens_lb` on the existing RDS instance, as its own role `civiclens_lb` (no access to AH's data; AH password rotations don't affect it) |
 | Files | `/var/lib/long-beach/storage` |
 | Access | `access.mode: invite_only` — no signup; every `/api` call needs a signed-in user |
 

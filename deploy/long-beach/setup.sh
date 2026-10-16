@@ -8,8 +8,10 @@
 # existing RDS instance, imports the already-processed corpus (no OCR on this
 # box), creates the admin account, builds the web app under a memory cap,
 # installs capped systemd services + nginx + TLS for longbeach.ahnj.info.
-# Never touches AH's services, database or env file (it only READS the RDS
-# host/credentials from /etc/atlantic-highlands.env).
+# Never touches AH's services, database or env file. It borrows the RDS master
+# login (from /etc/atlantic-highlands.env or AH's Secrets Manager entry, or
+# ADMIN_DATABASE_URL) only to create the civiclens_lb role + database, and
+# never stores it: Long Beach runs as civiclens_lb, which can't read AH's data.
 set -euo pipefail
 
 CORPUS="${1:-}"
@@ -33,25 +35,53 @@ say "Code → $APP"
 if [ -d "$APP/.git" ]; then git -C "$APP" pull --ff-only; else git clone --depth 50 "$REPO_URL" "$APP"; fi
 
 say "Environment ($ENVF)"
+# The RDS master login is borrowed only for this step (creating Long Beach's
+# own role and database) and is never written anywhere. Long Beach runs as
+# civiclens_lb, which owns civiclens_lb and nothing else: it can't read AH's
+# data, and rotating AH's password doesn't touch it.
+ah_admin_url() {
+  local u
+  u=$(grep -E '^DATABASE_URL=' /etc/atlantic-highlands.env 2>/dev/null | head -1 | cut -d= -f2-)
+  if grep -qE '^AWS_SECRETS_NAME=.+' /etc/atlantic-highlands.env 2>/dev/null; then
+    # Secrets Manager wins over the env file, exactly as AH's config.py does.
+    u=$( set -a; . /etc/atlantic-highlands.env; set +a
+         /opt/atlantic-highlands/api/venv/bin/python -c 'import json,os,boto3
+s=boto3.client("secretsmanager",region_name=os.getenv("AWS_REGION","us-east-1")).get_secret_value(SecretId=os.environ["AWS_SECRETS_NAME"])
+print(json.loads(s["SecretString"]).get("DATABASE_URL",""))' 2>/dev/null || true )
+    [ -n "$u" ] || u=$(grep -E '^DATABASE_URL=' /etc/atlantic-highlands.env | head -1 | cut -d= -f2-)
+  fi
+  echo "${u/postgresql+psycopg2:/postgresql:}"
+}
+ADMIN_URL="${ADMIN_DATABASE_URL:-$(ah_admin_url)}"
+[ -n "$ADMIN_URL" ] || { echo "Can't find AH's DATABASE_URL; run with ADMIN_DATABASE_URL=postgresql://master:pw@host:5432/postgres"; exit 1; }
+ADMIN_DB="${ADMIN_URL%/*}/postgres"
+
 if [ ! -f "$ENVF" ]; then
   cp "$HERE/long-beach.env.example" "$ENVF"
-  # Same RDS instance and credentials as AH, different database.
-  AH_URL=$(grep -E '^DATABASE_URL=' /etc/atlantic-highlands.env | head -1 | cut -d= -f2-)
-  [ -n "$AH_URL" ] || { echo "No DATABASE_URL in /etc/atlantic-highlands.env; set it in $ENVF by hand"; exit 1; }
-  LB_URL="${AH_URL%/*}/civiclens_lb"
-  sed -i "s#^DATABASE_URL=.*#DATABASE_URL=$LB_URL#" "$ENVF"
+  LB_PW=$(openssl rand -hex 24)
+  HOSTPART="${ADMIN_URL#*@}"; HOSTPART="${HOSTPART%%/*}"
+  sed -i "s#^DATABASE_URL=.*#DATABASE_URL=postgresql://civiclens_lb:$LB_PW@$HOSTPART/civiclens_lb#" "$ENVF"
   sed -i "s#^JWT_SECRET=.*#JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n/+=')#" "$ENVF"
   sed -i "s#^AI_KEYS_SECRET=.*#AI_KEYS_SECRET=$(openssl rand -base64 48 | tr -d '\n/+=')#" "$ENVF"
   sed -i "s#^PUBLIC_ORIGIN=.*#PUBLIC_ORIGIN=https://$DOMAIN#; s#^ALLOWED_ORIGINS=.*#ALLOWED_ORIGINS=https://$DOMAIN#" "$ENVF"
   chmod 600 "$ENVF"
 fi
 set -a; . "$ENVF"; set +a
+LB_PW=$(python3 -c 'import sys,urllib.parse as u; print(u.unquote(u.urlsplit(sys.argv[1]).password or ""))' "$DATABASE_URL")
 
-say "Database civiclens_lb (on the existing RDS instance)"
-ADMIN_DB="${DATABASE_URL%/*}/postgres"
-psql "$ADMIN_DB" -tAc "SELECT 1 FROM pg_database WHERE datname='civiclens_lb'" | grep -q 1 \
-  || psql "$ADMIN_DB" -c "CREATE DATABASE civiclens_lb"
-psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm"
+say "Database civiclens_lb, role civiclens_lb (on the existing RDS instance)"
+psql "$ADMIN_DB" -v ON_ERROR_STOP=1 -q <<SQL
+SELECT 'CREATE ROLE civiclens_lb LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='civiclens_lb')\\gexec
+ALTER ROLE civiclens_lb WITH LOGIN PASSWORD '$LB_PW';
+GRANT civiclens_lb TO CURRENT_USER;
+SELECT 'CREATE DATABASE civiclens_lb OWNER civiclens_lb' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname='civiclens_lb')\\gexec
+ALTER DATABASE civiclens_lb OWNER TO civiclens_lb;
+REVOKE ALL ON DATABASE civiclens_lb FROM PUBLIC;
+SQL
+# Extensions need the master login; everything after this runs as civiclens_lb.
+psql "${ADMIN_URL%/*}/civiclens_lb" -q -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm; ALTER SCHEMA public OWNER TO civiclens_lb"
+unset ADMIN_URL ADMIN_DB
+psql "$DATABASE_URL" -tAc "SELECT 'connected as ' || current_user"
 
 say "Python environment"
 cd "$APP/api"
