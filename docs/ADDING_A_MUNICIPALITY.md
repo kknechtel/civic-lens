@@ -3,6 +3,40 @@
 Each jurisdiction is one YAML file in a tree. This guide walks through adding
 a town, using Long Beach, NY (`us/ny/nassau/long-beach`) as the worked example.
 
+## 0. Quick start: let discovery draft it (5 minutes)
+
+```bash
+cd api
+python -m scripts.new_jurisdiction us/nj/monmouth/rumson --name "Borough of Rumson" \
+    --site https://www.rumsonnj.gov --government-type borough
+python -m scripts.check_profile us/nj/monmouth/rumson --live
+```
+
+`new_jurisdiction` crawls the site (about 60 pages, records pages first) and
+recognises eCode360 (with the customer code), CivicPlus AgendaCenter /
+DocumentCenter / RSS, Granicus, Legistar, BoardDocs, Municode, Laserfiche,
+iCal feeds and YouTube channels. Pages dense with documents become
+`html_index` sources grouped by topic (meetings, finance, legislation, land
+use, bids); links repeated in every page's header or footer are excluded. It
+writes a commented `jurisdiction.yaml` (and a county file if needed), and
+the state pack supplies the law: bid thresholds, records law, pay-to-play.
+
+On Rumson, a town never configured by hand, the draft found eCode360
+(`RU4115`), the YouTube channel, and five document sources that returned 90,
+191, 129, 23 and 10 documents on the first live check.
+
+Admins can run the same discovery for their own deployment in **Admin →
+Sources**: paste a website, review the platforms and draft sources, copy the
+YAML into the repo.
+
+Then write a handful of real questions with the documents that answer them in
+`jurisdictions/<path>/evals/search.yaml` and run
+`python -m scripts.eval_search <path>`. That number is how you know search
+works for this town (Atlantic Highlands: 94% of questions find the answer
+document in the top 10).
+
+Discovery is a draft. Sections 1–4 explain what to check and how to tune it.
+
 ## 1. Inventory the sources (about an hour)
 
 For each government that publishes records about the town, find where the

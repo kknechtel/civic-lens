@@ -1,0 +1,109 @@
+# Borough of Rumson — drafted by scripts/new_jurisdiction.py from https://www.rumsonnj.gov.
+# REVIEW BEFORE DEPLOYING: sources are discovery guesses. Check each with
+#   python -m scripts.check_profile us/nj/monmouth/rumson --live
+name: Borough of Rumson
+short_name: Rumson
+level: municipality
+government_type: borough
+aliases:
+- rumson-nj
+branding:
+  app_name: Rumson
+  theme_color: '#2563eb'
+entities:
+- key: rumson
+  label: Borough of Rumson
+  short: Rumson
+  kind: municipal
+  aliases:
+  - rumson
+ai:
+  background: Borough of Rumson is in Monmouth County, NJ. Add sourced, dated facts here (form of government, officials,
+    notable events).
+  suggested_questions:
+  - What did the governing body approve at its last meeting?
+  - Which contracts were awarded without competitive bidding?
+  - How has the budget changed over the last three years?
+sources:
+- id: ecode360
+  label: ecode360.com
+  description: eCode360 public documents — resolutions, minutes, agendas, budgets, legislation
+  adapter: ecode360
+  entity: rumson
+  params:
+    customer: RU4115
+- id: meeting_video
+  label: Meeting videos (YouTube)
+  adapter: youtube_channel
+  entity: rumson
+  doc_type: recording_meeting
+  params:
+    channel_id: UC0RE7X02N_UIKVySh7nuGug
+    title_pattern: council|board|planning|zoning|meeting|hearing|budget
+- id: meetings
+  label: Meeting agendas & minutes
+  description: Meeting agendas & minutes — 256 document links on 6 page(s) at discovery time
+  adapter: html_index
+  entity: rumson
+  params:
+    start_urls:
+    - https://www.rumsonnj.gov/agenda-archive
+    - https://www.rumsonnj.gov/agendas
+    - https://www.rumsonnj.gov/rumson-planning-board
+    - https://www.rumsonnj.gov/affordable-housing-program
+    - https://www.rumsonnj.gov/rumson-zoning-board
+    - https://www.rumsonnj.gov/council
+    title_from: row
+    exclude_pattern: 9497f2_8a5780f9bdcf43bf81568955a4a2eea0\.pdf|9497f2_d644031d0f8941ae891e6939cc614529\.pdf
+- id: finance
+  label: Budgets, audits & financial reports
+  description: Budgets, audits & financial reports — 138 document links on 6 page(s) at discovery time
+  adapter: html_index
+  entity: rumson
+  params:
+    start_urls:
+    - https://www.rumsonnj.gov/budgets
+    - https://www.rumsonnj.gov/forms
+    - https://www.rumsonnj.gov/municipalcourt
+    - https://www.rumsonnj.gov/assessor
+    - https://www.rumsonnj.gov/engineering
+    - https://www.rumsonnj.gov/finances
+    title_from: row
+    exclude_pattern: 9497f2_8a5780f9bdcf43bf81568955a4a2eea0\.pdf|9497f2_d644031d0f8941ae891e6939cc614529\.pdf
+- id: legislation
+  label: Ordinances & resolutions
+  description: Ordinances & resolutions — 12 document links on 1 page(s) at discovery time
+  adapter: html_index
+  entity: rumson
+  doc_type: ordinance
+  params:
+    start_urls:
+    - https://www.rumsonnj.gov/public-notices
+    title_from: row
+    exclude_pattern: 9497f2_8a5780f9bdcf43bf81568955a4a2eea0\.pdf|9497f2_d644031d0f8941ae891e6939cc614529\.pdf
+    allow_domains:
+    - 9497f291-1cdc-41d8-832c-d8eaece0aa2a.usrfiles.com
+- id: land_use
+  label: Planning & zoning
+  description: Planning & zoning — 24 document links on 3 page(s) at discovery time
+  adapter: html_index
+  entity: rumson
+  doc_type: planning
+  params:
+    start_urls:
+    - https://www.rumsonnj.gov/masterplan
+    - https://www.rumsonnj.gov/zoning-code
+    - https://www.rumsonnj.gov/stormwater
+    title_from: row
+    exclude_pattern: 9497f2_8a5780f9bdcf43bf81568955a4a2eea0\.pdf|9497f2_d644031d0f8941ae891e6939cc614529\.pdf
+- id: bids
+  label: Bids & RFPs
+  description: Bids & RFPs — 8 document links on 1 page(s) at discovery time
+  adapter: html_index
+  entity: rumson
+  doc_type: bid
+  params:
+    start_urls:
+    - https://www.rumsonnj.gov/construction
+    title_from: row
+    exclude_pattern: 9497f2_8a5780f9bdcf43bf81568955a4a2eea0\.pdf|9497f2_d644031d0f8941ae891e6939cc614529\.pdf

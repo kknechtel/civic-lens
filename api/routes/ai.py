@@ -202,3 +202,31 @@ def put_settings(body: SettingsIn, db: Session = Depends(get_db), admin: User = 
         ai.set_setting(db, "rates", {m: [float(v[0]), float(v[1])] for m, v in body.rates.items() if len(v) == 2},
                        admin.id)
     return admin_ai(db, admin)
+
+
+# ── source discovery (admin) ────────────────────────────────────────────────
+
+class DiscoverIn(BaseModel):
+    url: str
+    max_pages: int = 40
+
+
+@admin_router.post("/discover")
+def discover_sources(body: DiscoverIn, admin: User = Depends(get_admin_user)):
+    """Crawl a website and draft sources for this deployment's jurisdiction.yaml.
+    Read-only: nothing is saved; the YAML goes into the repo through review."""
+    from urllib.parse import urlparse
+
+    from municipality import get_municipality
+    from services.discovery import discover, to_yaml
+    u = body.url.strip()
+    if not urlparse(u).scheme:
+        u = "https://" + u
+    if urlparse(u).scheme not in ("http", "https") or not urlparse(u).netloc:
+        raise HTTPException(400, "Enter a website address, e.g. https://www.example.gov")
+    rep = discover([u], max_pages=max(5, min(body.max_pages, 80)))
+    entity = get_municipality().primary_entity.key
+    return {"pages_fetched": rep.pages_fetched, "platforms": {k: {kk: vv for kk, vv in v.items() if kk != "feeds"}
+                                                              for k, v in rep.platforms.items()},
+            "sources": rep.sources, "notes": rep.notes, "blocked": rep.blocked[:5],
+            "yaml": to_yaml(rep, entity), "jurisdiction": get_municipality().slug}

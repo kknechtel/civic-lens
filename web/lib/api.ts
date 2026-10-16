@@ -1606,3 +1606,12 @@ export const testDeploymentKey = (provider: string) =>
 export const putAdminAiSettings = (body: Partial<{ routes: Record<string, AiRoute>; sponsored: string[];
   caps: Record<string, number>; rates: Record<string, [number, number]> }>) =>
   request<AdminAi>("/api/admin/ai/settings", { method: "PUT", body: JSON.stringify(body) });
+
+export interface DiscoveryResult {
+  pages_fetched: number;
+  platforms: Record<string, { evidence: string[]; [k: string]: unknown }>;
+  sources: { id: string; label?: string; description?: string; adapter: string; evidence?: string[] }[];
+  notes: string[]; blocked: string[]; yaml: string; jurisdiction: string;
+}
+export const discoverSources = (url: string) =>
+  request<DiscoveryResult>("/api/admin/ai/discover", { method: "POST", body: JSON.stringify({ url }) });

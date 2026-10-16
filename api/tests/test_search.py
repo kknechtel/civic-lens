@@ -70,3 +70,9 @@ def test_operators_keep_websearch_semantics():
     kq = keyword_search.build(db, '"fireworks contract" -2019')
     assert kq.websearch == '"fireworks contract" -2019'
     keyword_search.reset_cache()
+
+
+def test_discovery_refuses_internal_addresses():
+    from services.discovery import _Fetcher
+    for u in ("http://127.0.0.1/", "http://169.254.169.254/latest/meta-data/", "http://10.0.0.5/", "file:///etc/passwd"):
+        assert not _Fetcher._public(u), u
