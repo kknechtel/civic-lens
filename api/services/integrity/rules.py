@@ -20,6 +20,7 @@ from typing import Any, Callable
 SEV_RANK = {"low": 1, "medium": 2, "high": 3}
 
 COMPETITIVE = {"competitive_bid", "rfp", "state_contract"}
+# prior_award (amends/continues an earlier contract) is neither: growth rules cover it.
 NONCOMPETITIVE = {"professional_services", "no_bid", "sole_source", "unknown"}
 SPEND = {"contract", "purchase", "change_order", "other"}
 
@@ -184,7 +185,7 @@ def near_threshold(ctx: Ctx) -> list[Flag]:
                 f"{ctx.cite('bid_threshold')}. Amounts parked just below a threshold can be a way to avoid "
                 "advertising. Innocent explanations: a genuine quote, or bidding the record doesn't mention.",
                 a.get("vendor_name"), a.get("entity_key"), a["amount"], [_ev(ctx, a)],
-                score=a["amount"] / t, scope=f"{a.get('document_id')}:{a.get('item_no')}",
+                score=a["amount"] / t, scope=f"{a.get('vendor_norm') or a.get('title')}:{a['amount']}",
             ))
     return out
 
@@ -251,9 +252,11 @@ def noncompetitive_concentration(ctx: Ctx) -> list[Flag]:
         t = ctx.threshold(recent[0]) if recent else 35000
         if len(recent) >= min_count or total >= 3 * t:
             sev = "high" if total >= 5 * t else "medium"
+            title = (f"{_vendor_label(recent)}: {len(recent)} awards without documented competition, {_money(total)} in {months} months"
+                     if len(recent) > 1 else
+                     f"{_vendor_label(recent)}: {_money(total)} award without documented competition")
             out.append(Flag(
-                "noncompetitive_concentration", sev,
-                f"{_vendor_label(recent)}: {len(recent)} awards without documented competition, {_money(total)} in {months} months",
+                "noncompetitive_concentration", sev, title,
                 "Repeated awards to one vendor through professional-services, no-bid, sole-source or undocumented "
                 "procurement concentrate spending outside competition. Professional services are often legally "
                 "exempt from bidding, so check whether the vendor was chosen through any RFP/RFQ process and "
@@ -266,15 +269,18 @@ def noncompetitive_concentration(ctx: Ctx) -> list[Flag]:
 
 def single_bid(ctx: Ctx) -> list[Flag]:
     out = []
+    # Unit-price bids ($225 per tow) aren't contract values; skip tiny amounts.
+    floor = float(ctx.cfg("single_bid_min_amount", default=10000))
     for a in ctx.awards:
-        if a.get("procurement") in ("competitive_bid", "rfp") and a.get("bids_received") == 1:
+        if (a.get("procurement") in ("competitive_bid", "rfp") and a.get("bids_received") == 1
+                and (a.get("amount") or 0) >= floor):
             out.append(Flag(
                 "single_bid", "medium",
                 f"Only one bid received — {a.get('vendor_name') or 'vendor not named'}, {_money(a.get('amount'))}",
                 "A competitive process that draws a single response may have been narrowly specified, "
                 "poorly advertised, or steered. Compare the specs and the advertisement period.",
                 a.get("vendor_name"), a.get("entity_key"), a.get("amount"), [_ev(ctx, a)],
-                score=2, scope=f"{a.get('document_id')}:{a.get('item_no')}",
+                score=2, scope=f"{a.get('vendor_norm') or a.get('title')}:{a.get('amount')}",
             ))
     return out
 
@@ -286,8 +292,8 @@ def duplicate_award(ctx: Ctx) -> list[Flag]:
     for (entity, vnorm), g in groups.items():
         for i, a in enumerate(g):
             for b in g[i + 1:]:
-                if (a["amount"] == b["amount"] and a.get("document_id") != b.get("document_id")
-                        and a.get("meeting_date") and b.get("meeting_date")
+                if (a["amount"] == b["amount"] and a.get("meeting_date") and b.get("meeting_date")
+                        and a["meeting_date"] != b["meeting_date"]
                         and abs((b["meeting_date"] - a["meeting_date"]).days) <= window):
                     out.append(Flag(
                         "duplicate_award", "medium",
@@ -428,8 +434,11 @@ def pay_to_play(ctx: Ctx) -> list[Flag]:
     return out
 
 
+_BOILERPLATE = re.compile(r"likelihood|risk of|could be subject|prevent|detect(?:ing|ion)?\s+(?:of\s+)?(?:and\s+)?|"
+                          r"reduce|safeguard|designed to|reasonable assurance|categories|classif", re.I)
 _OVERSIGHT_PATTERNS = [
-    (r"significant fiscal stress", "high"), (r"\bfraud", "high"), (r"misappropriat", "high"), (r"\btheft\b", "high"),
+    (r"(?:is|was|remains?|be|been|were|in)\s+(?:in\s+)?significant\s+fiscal\s+stress|significant\s+fiscal\s+stress\s+(?:designation|score)", "high"),
+    (r"(?:identified|found|detected|resulted\s+in|evidence\s+of|instances?\s+of|alleged)\s+(?:\w+\s+){0,3}(?:fraud|theft|misappropriat\w*)", "high"),
     (r"improper(?:ly)?\s+(?:paid|payments?|used)", "high"), (r"did not (?:comply|follow|obtain|seek|competitively)", "medium"),
     (r"without (?:competitive|board|council) (?:bidding|approval)", "medium"), (r"unsupported", "medium"),
     (r"overpa(?:id|yments?)", "medium"), (r"moderate fiscal stress", "medium"), (r"operating deficits?", "medium"),
@@ -444,7 +453,8 @@ def oversight_findings(ctx: Ctx) -> list[Flag]:
         text = d.get("text") or ""
         hits, sev = [], "low"
         for pat, s in _OVERSIGHT_PATTERNS:
-            m = re.search(pat, text, re.I)
+            m = next((m for m in re.finditer(pat, text, re.I)
+                      if not _BOILERPLATE.search(text[max(0, m.start() - 80):m.end() + 40])), None)
             if m:
                 quote = " ".join(text[max(0, m.start() - 160):m.end() + 160].split())
                 page = None

@@ -110,8 +110,8 @@ async def process_one(db, doc, *, enrich: bool = True, reextract: bool = False,
         return res
 
     except Exception as exc:
+        db.rollback()  # first: the failed flush leaves the session unusable
         logger.error("process %s failed: %s", doc.filename, exc, exc_info=True)
-        db.rollback()
         meta = dict(doc.metadata_ or {})
         meta["process_attempts"] = int(meta.get("process_attempts") or 0) + 1
         meta["process_error"] = str(exc)[:500]

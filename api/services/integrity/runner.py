@@ -80,7 +80,10 @@ def extract_pending(db, force: bool = False, limit: int | None = None) -> dict:
     q = db.query(Document).filter(Document.extracted_text.isnot(None),
                                   or_(Document.doc_type.in_([t for t in _FACT_TYPES if t]), Document.doc_type.is_(None)))
     totals = {"documents": 0, "awards": 0, "personnel": 0, "officials": 0}
-    for doc in q.yield_per(50):
+    # Iterate ids, not a streaming cursor: we commit every 50 docs, which
+    # would invalidate a server-side cursor mid-loop.
+    for (doc_id,) in q.with_entities(Document.id).all():
+        doc = db.get(Document, doc_id)
         if not force and (doc.metadata_ or {}).get("integrity_version") == EXTRACT_VERSION:
             continue
         counts = extract_document(db, doc)
@@ -99,9 +102,69 @@ def _rows(q) -> list[dict]:
     return [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in q]
 
 
+_GENERIC_VENDOR_WORDS = set("""and of the industries group associates contracting contractors construction services solutions
+engineering engineers architects consultants consulting systems technologies technology supply supplies electric
+environmental partners company corp inc llc enterprises sales""".split())
+
+
+def canonical_vendors(norms: list[str]) -> dict[str, str]:
+    """Merge spelling variants of one vendor ("a i i allen industries" → "allen industries",
+    "t novelli contracting" ~ "thomas novelli contracting"). Two names link when every
+    word of the shorter (initials dropped) appears in the longer and they share a
+    distinctive word — so "allen electric" and "allen industries" stay apart. Links are
+    transitive (union-find); each group is named by its most complete variant."""
+    def toks(n):
+        return frozenset(t for t in n.split() if len(t) > 1)
+    names = sorted(set(n for n in norms if n))
+    parent = {n: n for n in names}
+
+    def find(n):
+        while parent[n] != n:
+            parent[n] = parent[parent[n]]
+            n = parent[n]
+        return n
+
+    tk = {n: toks(n) for n in names}
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            ta, tb = tk[a], tk[b]
+            small, big = (ta, tb) if len(ta) <= len(tb) else (tb, ta)
+            if small and small <= big and (small - _GENERIC_VENDOR_WORDS or not (big - _GENERIC_VENDOR_WORDS)):
+                parent[find(a)] = find(b)
+    groups: dict[str, list[str]] = {}
+    for n in names:
+        groups.setdefault(find(n), []).append(n)
+    canon = {}
+    for members in groups.values():
+        rep = max(members, key=lambda m: (len(tk[m]), m))
+        for m in members:
+            canon[m] = rep
+    return canon
+
+
+def dedupe_awards(awards: list[dict]) -> list[dict]:
+    """One resolution shows up in the agenda, the backup packet and the minutes.
+    Collapse copies (same entity, meeting date, amount and vendor/title) and keep
+    the other documents as extra evidence."""
+    keep: dict[tuple, dict] = {}
+    for a in sorted(awards, key=lambda a: str(a.get("document_id"))):
+        subject = a.get("vendor_norm") or re.sub(r"\W+", " ", (a.get("title") or "").lower())[:60]
+        key = (a.get("entity_key"), a.get("meeting_date"), round(a.get("amount") or 0, 2), subject, a.get("action_type"))
+        if key in keep:
+            keep[key].setdefault("copies", []).append(a)
+        else:
+            keep[key] = a
+    return list(keep.values())
+
+
 def build_context(db) -> Ctx:
     muni = get_municipality()
     awards = _rows(db.query(Award).all())
+    canon = canonical_vendors([a["vendor_norm"] for a in awards if a.get("vendor_norm")])
+    for a in awards:
+        if a.get("vendor_norm"):
+            a["vendor_norm"] = canon.get(a["vendor_norm"], a["vendor_norm"])
+    awards = dedupe_awards(awards)
     for a in awards:
         if a.get("meeting_date"):
             a["fiscal_year"] = muni.fiscal_year_for(a["meeting_date"].year, a["meeting_date"].month, a.get("entity_key"))
@@ -111,10 +174,16 @@ def build_context(db) -> Ctx:
     doc_ids |= {str(p["document_id"]) for p in personnel}
 
     oversight = []
+    # Audits, plus any document with audit text embedded (councils often attach
+    # State Comptroller reports to their minutes).
+    audit_text = or_(Document.extracted_text.ilike("%Report of Examination%"),
+                     Document.extracted_text.ilike("%Local Government and School Accountability%"),
+                     Document.extracted_text.ilike("%Independent Auditor%Report%"),
+                     Document.extracted_text.ilike("%Auditor%Management Report%"))
     for d in db.query(Document).filter(Document.extracted_text.isnot(None)).filter(
-            or_(Document.doc_type == "audit", Document.doc_type == "audit_management_report")).all():
+            or_(Document.doc_type.in_(["audit", "audit_management_report"]), audit_text)).all():
         title = d.title or (d.metadata_ or {}).get("title") or d.filename
-        if d.doc_type == "audit" or _OVERSIGHT_TITLE.search(title or ""):
+        if True:
             oversight.append({"document_id": d.id, "title": title, "text": d.extracted_text,
                               "url": (d.metadata_ or {}).get("source_url"), "entity_key": d.municipality})
             doc_ids.add(str(d.id))

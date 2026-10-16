@@ -55,24 +55,39 @@ _ACCOUNT_RE = re.compile(
 )
 
 _PROCUREMENT = [  # first match wins
-    ("emergency", re.compile(r"\bemergenc(?:y|ies)\b(?!\s+(?:Services|Management|Medical|Operations|Response|Communications|Preparedness|Planning))|N\.?J\.?S\.?A\.?\s*40A:11-6\b|General Municipal Law\s*§?\s*103\s*\(4\)", re.I)),
+    ("emergency", re.compile(r"\bemergenc(?:y|ies)\b(?!\s+(?:Services|Management|Medical|Operations|Response|Communications|Preparedness|Planning|Supply|Dispatch|"
+                             r"Vehicles?|Equipment|Generators?|Lighting|Notification|Alert|Call|Medical|Shelter|Contact))|N\.?J\.?S\.?A\.?\s*40A:11-6\b|General Municipal Law\s*§?\s*103\s*\(4\)", re.I)),
     ("sole_source", re.compile(r"\bsole[\s-]source\b|\bsingle[\s-]source\b|\bproprietary\b", re.I)),
     ("no_bid", re.compile(r"non-?\s*fair\s+and\s+open|without\s+(?:public\s+|competitive\s+)?bid|\bno[\s-]bid\b|"
                           r"exempt(?:ion)?\s+from\s+(?:public\s+|competitive\s+)?bidding|extraordinary,?\s+unspecifiable", re.I)),
     ("state_contract", re.compile(r"\bstate\s+contract\b|\bOGS\b|\bNYS\s+contract|\bcounty\s+contract\b|piggy-?back|"
-                                  r"cooperative\s+(?:purchas|pricing|contract)|Sourcewell|BuyBoard|\bGSA\b|"
+                                  r"cooperative\s+(?:purchas|pricing|contract)|Sourcewell|BuyBoard|\bGSA\b|SAVVIK|HGAC|Omnia|NASPO|E&I\s+Cooperative|\bTIPS\b|"
+                                  r"preferred\s+source|Industries\s+for\s+the\s+Disabled|NYSID|Corcraft|"
                                   r"\bN\.?J\.?\s*START\b|Educational\s+Services\s+Commission", re.I)),
     ("competitive_bid", re.compile(r"lowest\s+(?:responsible\s+|responsive\s+)*bidder|sealed\s+bids|bids?\s+(?:were|was)\s+received|"
                                    r"public(?:ly)?\s+(?:bid|advertised)|fair\s+and\s+open\s+process", re.I)),
     ("rfp", re.compile(r"request\s+for\s+proposals?|\bRFP\b|\bRFQ\b|proposals?\s+(?:were|was)\s+received|competitive\s+contracting", re.I)),
+    # Continues/amends a contract procured earlier — competition (if any) happened then.
+    ("prior_award", re.compile(r"pursuant\s+to\s+Resolution\s+No\.?\s*\d|previously\s+(?:authorized|awarded|approved|retained)|"
+                               r"continued\s+retention|extend(?:ing|sion\s+of)?\s+(?:the\s+)?(?:current\s+|existing\s+)?(?:agreement|contract)|"
+                               r"renew(?:al|ing)?\s+(?:of\s+)?(?:the\s+)?(?:agreement|contract)", re.I)),
     ("professional_services", re.compile(r"professional\s+services?", re.I)),
 ]
 
 _ACTION = [  # first match wins
+    # Not spending: budgets, debt authorizations and insured values carry huge amounts.
+    ("budget_adoption", re.compile(r"adoption\s+of\s+the\s+(?:operating\s+|annual\s+|capital\s+)?budget|appropriating\s+sums|"
+                                   r"tax\s+levy|adopt(?:ing|ion\s+of)\s+the\s+\d{4}", re.I)),
+    ("bond", re.compile(r"bond\s+ordinance|amendatory\s+bond|bond\s+anticipation|issuance\s+of\s+(?:serial\s+)?(?:bonds|notes)|"
+                        r"bond\s+resolution|financing\s+(?:the\s+)?costs?\s+of|principal\s+of\s+and\s+interest", re.I)),
+    ("insurance", re.compile(r"\binsurance\b|\bpremium|\bcoverage\b|insurable\s+value|limits?\s+of\s+liability", re.I)),
+    ("employment", re.compile(r"employment\s+(?:contract|agreement)|appoint\w*\s+[A-Z][a-z]+\s+[A-Z][a-z]+\s+as\s+(?:the\s+)?"
+                              r"(?:Corporation\s+Counsel|City\s+Manager|Comptroller|Commissioner|Director|Chief)", re.I)),
     ("payout", re.compile(r"separation\s+pay|termination\s+pay|terminal\s+leave|pay[\s-]?outs?\b|accrued\s+(?:vacation|sick|leave)|"
                           r"unused\s+(?:sick|vacation)|retirement\s+incentive|severance", re.I)),
     ("settlement", re.compile(r"\bsettle(?:ment|d)?\b|\bjudgment\b|\bstipulation\b", re.I)),
-    ("change_order", re.compile(r"change\s+order|contract\s+amendment|increase\s+the\s+(?:contract|purchase\s+order)", re.I)),
+    ("change_order", re.compile(r"change\s+order|contract\s+amendment|increase\s+(?:the\s+)?(?:amount|contract|purchase\s+order)|"
+                                r"previously\s+authorized\s+purchase\s+order|additional\s+(?:cost|services|fees?|work)\b", re.I)),
     ("transfer", re.compile(r"transfer\s+of\s+funds|budget\s+(?:amendment|transfer)|appropriation\s+transfer", re.I)),
     ("grant", re.compile(r"\bgrant\b|accept\s+(?:funds|funding)|reimbursement\s+from", re.I)),
     ("lease", re.compile(r"\blease\b|license\s+agreement|concession", re.I)),
@@ -83,6 +98,22 @@ _ACTION = [  # first match wins
 
 _TITLE_RE = re.compile(r"(Resolution\s+(?:Authorizing|Approving|for|Awarding|Accepting|Setting|Amending|to|Ratifying)\b[^\n]{3,200}"
                        r"(?:\n(?!\s*(?:WHEREAS|NOW|RESOLVED))[^\n]{3,160})?)", re.I)
+
+# "$X" right after a price phrase is the award amount; other dollar figures in a
+# resolution are often budgets, prior awards or grant totals.
+_PRICED_RE = re.compile(
+    r"(?:cost|price|amount|sum|total|fee|not\s+to\s+exceed|NTE|bid|proposal|quote)\s*(?:of|is|was|:)?\s*"
+    r"(?:not\s+to\s+exceed\s+|up\s+to\s+|approximately\s+)?\$\s?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})?)(?!\d)", re.I)
+_NOT_VENDOR = re.compile(r"(?i)\b(section|law|interview|page|resolution|whereas|council|file|minutes|agenda|selection|"
+                         r"program|modification|activities|regularly|scheduled|meeting|extend|current|agreement for)\b")
+
+
+def plausible_vendor(name: str) -> bool:
+    """Reject sentence fragments the patterns sometimes catch in scanned memos."""
+    words = name.split()
+    return 1 <= len(words) <= 8 and not _NOT_VENDOR.search(name) and sum(c.isdigit() for c in name) <= 4 \
+        and not name.lower().endswith((" the", " of", " and"))
+
 
 _SUFFIX_NORM = re.compile(r"\b(the|inc|incorporated|llc|l l c|llp|corp|corporation|company|co|pc|p c|pa|ltd|limited|dba|d b a)\b")
 
@@ -208,24 +239,37 @@ def extract_awards(text: str, fallback_date: date | None = None) -> list[AwardFa
         # Collapse whitespace so names/addresses wrapped across lines still match.
         seg = " ".join(_PAGE_RE.sub(" ", raw).split())
         resolved = _RESOLVED_RE.search(seg)
+        if resolved:
+            # A resolution is WHEREAS…RESOLVED plus a paragraph or two. Anything
+            # beyond that (an attached audit, a contract) isn't this item's text.
+            seg = seg[max(0, resolved.start() - 3000):resolved.start() + 1500]
+            resolved = _RESOLVED_RE.search(seg)
         body = seg[resolved.start():] if resolved else seg
-        amounts = [parse_money(m.group(1)) for m in _MONEY_RE.finditer(body)] or \
-                  [parse_money(m.group(1)) for m in _MONEY_RE.finditer(seg)]
+        # Prefer the RESOLVED clause; the WHEREAS background often quotes bond
+        # totals, grant awards and prior contracts.
+        amounts = ([parse_money(m.group(1)) for m in _PRICED_RE.finditer(body)]
+                   or [parse_money(m.group(1)) for m in _MONEY_RE.finditer(body)]
+                   or [parse_money(m.group(1)) for m in _PRICED_RE.finditer(seg)]
+                   or [parse_money(m.group(1)) for m in _MONEY_RE.finditer(seg)])
         amounts = [a for a in amounts if a >= 1]
         title_m = _TITLE_RE.search(raw)
         title = " ".join(title_m.group(1).split())[:240] if title_m else " ".join(seg[:160].split())
         action, _ = _classify(_ACTION, title + " " + seg[:1500], "other")
         procurement, proc_m = _classify(_PROCUREMENT, seg, "unknown")
+        if procurement == "emergency" and not re.search(r"emergenc", title + " " + body, re.I):
+            # "Emergency" only in the WHEREAS background (FEMA, Sandy…) — not an emergency procurement.
+            procurement, proc_m = _classify(_PROCUREMENT[1:], seg, "unknown")
         if not amounts and action not in ("payout", "settlement", "change_order"):
             continue
-        if action in ("transfer", "grant", "payout", "settlement"):
+        if action in ("transfer", "grant", "payout", "settlement", "budget_adoption", "bond", "insurance", "employment"):
             procurement, proc_m = "n/a", None  # not a purchase; procurement rules don't apply
         vm = _VENDOR_ADDR_RE.search(body) or _VENDOR_ADDR_RE.search(seg)
         vendor, address = (vm.group("v").strip(" ,"), " ".join(vm.group("a").split())) if vm else (None, None)
         if not vendor:
             vm2 = _VENDOR_RE.search(body) or _VENDOR_RE.search(seg)
             vendor = vm2.group("v").strip(" ,") if vm2 else None
-        if vendor and re.match(r"(?i)^(the\s+)?(city|town|village|borough|county|state|council|board|department)\b", vendor):
+        if vendor and (re.match(r"(?i)^(the\s+)?(city|town|village|borough|county|state|council|board|department)\b", vendor)
+                       or not plausible_vendor(vendor)):
             vendor = None  # "with the City of …" is the counterparty, not a vendor
         bm = _BIDS_RE.search(seg)
         bids = None

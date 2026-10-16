@@ -246,3 +246,109 @@ def test_payments_over_threshold_unless_competitively_awarded():
     assert len(hits) == 1 and hits[0].severity == "medium"
     bid = award(document_id="bid", procurement="competitive_bid", vendor_norm="suburban disposal", amount=500000.0)
     assert not by_rule(rules(pay, bid, config={**NY, "bid_threshold": {"purchase": 44000}}), "payments_over_threshold")
+
+
+def test_non_spending_amounts_are_classified_out():
+    from services.integrity.extract import extract_awards
+    text = """Item No. 1
+Resolution Authorizing the Adoption of the Operating Budget for the Fiscal Year Commencing July 1, 2025
+RESOLVED, that the budget appropriating sums of $113,843,910.00 be adopted.
+Item No. 2
+Resolution Authorizing Publication of an Amendatory Bond Ordinance
+RESOLVED, that bonds in the amount of $169,252,981.00 be issued for the principal of and interest thereon.
+Item No. 3
+Resolution Authorizing Renewal of Property Insurance
+WHEREAS, the City suffered flood damage and FEMA emergency declarations;
+RESOLVED, that coverage with total insurable value of $1,860,106,700.00 be renewed with Insurance Services."""
+    kinds = [(a.action_type, a.procurement) for a in extract_awards(text)]
+    assert kinds == [("budget_adoption", "n/a"), ("bond", "n/a"), ("insurance", "n/a")]
+
+
+def test_whereas_background_emergency_is_not_emergency_procurement():
+    from services.integrity.extract import extract_awards
+    text = """Item No. 4
+Resolution Authorizing a Contract for Boardwalk Repairs
+WHEREAS, after the Hurricane Sandy emergency the boardwalk was rebuilt;
+WHEREAS, three (3) bids were received;
+RESOLVED, that a contract be awarded to Shore Builders Inc., the lowest responsible bidder, for $250,000.00."""
+    a = extract_awards(text)[0]
+    assert a.procurement == "competitive_bid" and a.bids_received == 3
+
+
+def test_dedupe_collapses_agenda_backup_minutes():
+    from services.integrity.runner import dedupe_awards
+    base = award(vendor_norm="acme supply", amount=47850.0)
+    rows = dedupe_awards([dict(base, document_id="agenda"), dict(base, document_id="backup"), dict(base, document_id="minutes")])
+    assert len(rows) == 1 and len(rows[0]["copies"]) == 2
+
+
+def test_attached_audit_does_not_become_an_award_amount():
+    from services.integrity.extract import extract_awards
+    audit = " ".join(["Fund balance was $81,798,874.00 at year end."] * 200)
+    text = f"""Item No. 7
+Resolution Authorizing the City Manager to Purchase Software Services
+RESOLVED, that the City Manager purchase software services from Tyler Technologies, Inc. at a cost of $48,500.00.
+{audit}"""
+    a = extract_awards(text)[0]
+    assert a.amount == 48500.0 and a.vendor_name == "Tyler Technologies, Inc."
+
+
+@pytest.mark.parametrize("name,ok", [
+    ("Tully Environmental, Inc.", True),
+    ("20 minute interview. Final selection of the Consultant", False),
+    ("Section 103-D of the General Municipal law, the Contractor", False),
+])
+def test_plausible_vendor(name, ok):
+    from services.integrity.extract import plausible_vendor
+    assert plausible_vendor(name) is ok
+
+
+def test_canonical_vendors_merge_variants_not_neighbours():
+    from services.integrity.runner import canonical_vendors
+    c = canonical_vendors(["a i i allen industries", "allen industries", "i i allen industries", "allen electric",
+                           "thomas novelli contracting", "t novelli contracting"])
+    assert c["a i i allen industries"] == c["allen industries"] == c["i i allen industries"]
+    assert c["allen electric"] != c["allen industries"]
+    assert c["t novelli contracting"] == c["thomas novelli contracting"]
+
+
+def test_audit_boilerplate_is_not_a_fraud_finding():
+    boiler = {"document_id": "a", "title": "Single Audit", "entity_key": "x",
+              "text": "Internal controls reduce the likelihood that significant errors or fraud will occur. "
+                      "Supplies could be subject to theft."}
+    real = {"document_id": "b", "title": "OSC audit", "entity_key": "x",
+            "text": "We found instances of misappropriation of cash receipts totalling $12,000."}
+    hits = by_rule(rules(oversight_docs=[boiler, real]), "oversight_findings")
+    assert [h.subject for h in hits] == ["OSC audit"] and hits[0].severity == "high"
+
+
+def test_emergency_in_vendor_or_dispatch_names_is_not_emergency_procurement():
+    from services.integrity.extract import extract_awards
+    text = """Item No. 2
+Resolution Authorizing Purchase of Dispatch Furniture for Emergency Communications
+WHEREAS, two (2) bids were received;
+RESOLVED, that furniture be purchased from AAA Emergency Supply Co., Inc. at a cost of $79,991.00."""
+    assert extract_awards(text)[0].procurement == "competitive_bid"
+
+
+def test_amendments_and_cooperative_purchases_are_not_noncompetitive():
+    from services.integrity.extract import extract_awards
+    text = """Item No. 3
+Resolution Authorizing Additional Services
+WHEREAS, pursuant to Resolution No. 104/14 the City retained D&B Engineers and Architects, P.C.;
+RESOLVED, that additional services be authorized with D&B Engineers and Architects, P.C. at a cost of $884,283.00.
+Item No. 4
+Resolution Authorizing Purchase of Stretchers
+WHEREAS, the City is a member of SAVVIK Buying Group, a cooperative;
+RESOLVED, that stretchers be purchased from Stryker Sales, LLC at a cost of $112,889.38."""
+    a, b = extract_awards(text)
+    assert (a.action_type, a.procurement) == ("change_order", "prior_award")
+    assert b.procurement == "state_contract"
+
+
+def test_canonical_vendors_transitive_and_deterministic():
+    from services.integrity.runner import canonical_vendors
+    names = ["thomas novelli", "t novelli contracting", "thomas novelli contracting"]
+    for order in (names, list(reversed(names))):
+        c = canonical_vendors(order)
+        assert len(set(c.values())) == 1 and c["thomas novelli"] == "thomas novelli contracting"

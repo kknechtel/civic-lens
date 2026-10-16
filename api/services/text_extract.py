@@ -144,6 +144,14 @@ def _image(content: bytes) -> str:
 
 
 async def extract(filename: str, content: bytes) -> ExtractResult:
+    res = await _extract(filename, content)
+    # Postgres TEXT can't hold NUL; some PDFs' text layers contain them.
+    if res.text and "\x00" in res.text:
+        res.text = res.text.replace("\x00", "")
+    return res
+
+
+async def _extract(filename: str, content: bytes) -> ExtractResult:
     kind = detect_kind(filename, content)
     if kind == "pdf":
         from services.ocr_pipeline import extract_pdf_to_markdown
