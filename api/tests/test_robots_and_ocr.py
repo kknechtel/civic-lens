@@ -34,7 +34,7 @@ def test_disallow_all_blocks_and_reports_once():
     s = _scraper({"https://www.longbeachny.gov": (200, LB_ROBOTS)})
     assert not s.robots_allows("https://www.longbeachny.gov/councilmeetings")
     assert not s.robots_allows("https://www.longbeachny.gov/audit")
-    assert len(s.errors) == 1 and "permission" in s.errors[0]
+    assert len(s.errors) == 1 and "opted into robots.txt" in s.errors[0]
     # The gate is applied before any page or file request.
     assert s.fetch_page("https://www.longbeachny.gov/budget") is None
     assert s.download_file_to_bytes("https://www.longbeachny.gov/x.pdf")[0] is None
@@ -69,6 +69,7 @@ def test_legacy_crawlers_inherit_crawl_policy(monkeypatch):
     class Fake:
         def __init__(self):
             self.basic = BasicScraper()
+            self.basic.respect_robots = True  # whatever the crawler defaults to, the deployment decides
         def find_documents(self):
             return [{"respect": self.basic.respect_robots}]
 
@@ -76,6 +77,8 @@ def test_legacy_crawlers_inherit_crawl_policy(monkeypatch):
     muni = load_deployment("atlantic-highlands-nj")  # inherits respect_robots: false from NJ
     src = muni.source("ahnj").model_copy(update={"params": {"class": "FakeCrawler"}})
     assert build_adapter(src, muni).discover() == [{"respect": False}]
+    opted_in = muni.model_copy(update={"crawl": muni.crawl.model_copy(update={"respect_robots": True})})
+    assert build_adapter(src, opted_in).discover() == [{"respect": True}]
 
 
 # ── OCR limits ──────────────────────────────────────────────────────────────

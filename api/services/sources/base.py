@@ -21,6 +21,7 @@ import re
 from typing import Callable, Optional
 
 from municipality import Municipality, Source
+from services.scraper.config import RESPECT_ROBOTS_TXT
 from services.scraper.scraper import BasicScraper
 
 logger = logging.getLogger("sources")
@@ -40,8 +41,8 @@ class SourceAdapter:
         self.progress_callback: Optional[Callable[[int], None]] = None
         self.basic = BasicScraper()
         # Deployment policy (crawl.respect_robots), overridable per source;
-        # RESPECT_ROBOTS_TXT=false in the environment turns it off everywhere.
-        self.basic.respect_robots = self.basic.respect_robots and municipality.respects_robots(source)
+        # RESPECT_ROBOTS_TXT=true in the environment turns it on everywhere.
+        self.basic.respect_robots = RESPECT_ROBOTS_TXT or municipality.respects_robots(source)
 
     # ── to override ───────────────────────────────────────────────────
     def discover(self) -> list[dict]:

@@ -191,7 +191,8 @@ class Features(BaseModel):
 class CrawlPolicy(BaseModel):
     model_config = {"extra": "forbid"}
     # Whether to obey robots.txt. Public records are public; operators decide.
-    respect_robots: bool = True
+    # Public records: robots.txt is advisory and not consulted unless a deployment opts in.
+    respect_robots: bool = False
     # Always identify honestly and stay polite either way.
     min_delay_seconds: float = 1.5
 

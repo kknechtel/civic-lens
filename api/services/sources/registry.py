@@ -10,6 +10,8 @@ from typing import Callable
 
 from municipality import Municipality, Source, get_municipality
 
+from services.scraper.config import RESPECT_ROBOTS_TXT
+
 from .base import SourceAdapter
 from .feeds import RssAdapter, SitemapAdapter, YouTubeChannelAdapter
 from .browser import Ecode360Adapter
@@ -35,7 +37,7 @@ class LegacyCrawlerAdapter(SourceAdapter):
         crawler.progress_callback = self.progress_callback
         if getattr(crawler, "basic", None) is not None:
             # Legacy crawlers build their own scraper; apply the deployment's crawl policy to it too.
-            crawler.basic.respect_robots = crawler.basic.respect_robots and self.municipality.respects_robots(self.source)
+            crawler.basic.respect_robots = RESPECT_ROBOTS_TXT or self.municipality.respects_robots(self.source)
             self.basic = crawler.basic  # so the runner harvests its connect errors
         return crawler.find_documents()
 

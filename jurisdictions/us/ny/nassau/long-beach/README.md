@@ -18,13 +18,10 @@ keyword search, all in about 75 seconds with no API keys. The largest file was a
 
 **To unlock the rest:**
 
-1. Email the City Clerk (FOIL@longbeachny.gov or the clerk's office) asking
-   permission to index `/councilmeetings`, `/budget`, `/audit`, `/zoning`,
-   `/planning` and `/vertical/sites/.../uploads/`. Record the answer as a
-   `permission_note`.
-2. Ask the school district (or ParentSquare) the same about
-   `files.smartsites.parentsquare.com/11147/`.
-3. Set `YOUTUBE_API_KEY`.
+1. Nothing to ask for: these are public records, and robots.txt is not consulted
+   (`crawl.respect_robots: false`). The city site and ParentSquare files are crawled
+   with an honest User-Agent and rate limiting.
+2. Set `YOUTUBE_API_KEY` (the channel's RSS feed is blocked outright, not just by robots.txt).
 
 Open gaps: Nassau County sources aren't configured yet (CivicPlus AgendaCenter
 RSS is available), and the OSC bulk financial CSVs need a `json_api`/bulk

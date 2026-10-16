@@ -17,9 +17,11 @@ documents live and how they are linked:
 | Meeting video | YouTube channel ID (`UC…`) |
 | Events | iCal feeds (libraries almost always have one) |
 
-For each candidate site, check `https://<host>/robots.txt` first. If it
-disallows crawlers (`User-agent: *` / `Disallow: /`), you need the site
-owner's permission before collecting from it. See step 5.
+Government sites often disallow crawlers in robots.txt. That file is advisory
+and these are public records, so CivicLens doesn't consult it by default (step 5).
+What does matter is technical blocking (Cloudflare challenges, rate limits): use
+the `ecode360`-style browser adapter for the first, a slower `crawl.min_delay_seconds`
+for the second.
 
 Open the page source and note how documents are linked: plain `<a href="…pdf">`
 links, links grouped under headings (accordions or year sections), or links to
@@ -154,7 +156,7 @@ python -m scripts.check_profile long-beach-ny --live     # fetch index pages, no
 ```
 ✓ lbcsd_board [html_index → lbcsd] 513 items in 5.9s  {'minutes': 180, 'notice': 172, 'agenda': 160}
 ! city_council [html_index → long_beach] 0 items
-    robots.txt on www.longbeachny.gov disallows CivicLens; skipping. Ask the site owner for permission ...
+    HTTP 403 on www.longbeachny.gov … (blocked; try the browser adapter)
 ```
 
 Iterate until every source finds roughly what you counted by hand and the
@@ -166,12 +168,11 @@ SCRAPER_MAX_DOCS_PER_SOURCE=10 python -m scripts.scheduled_scrape
 
 ## 5. Crawl policy
 
-`crawl.respect_robots` is inherited down the tree (the NJ and NY state files
-set it to `false`) and can be overridden per source with
-`respect_robots: true|false`. `RESPECT_ROBOTS_TXT=false` in the environment
-switches robots checks off everywhere. Whatever the policy, the crawler sends
-its honest User-Agent and stays polite. Record any arrangement with a site
-owner in the source's `permission_note`.
+robots.txt is not consulted by default: public records are public. A deployment
+can opt in with `crawl.respect_robots: true` (inherited down the tree, overridable
+per source) or `RESPECT_ROBOTS_TXT=true`. Whatever the policy, the crawler sends
+its honest User-Agent, rate-limits (`crawl.min_delay_seconds`) and backs off on
+429s. `permission_note` remains available to record any arrangement with a site owner.
 
 ## 6. New state?
 

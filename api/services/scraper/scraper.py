@@ -104,9 +104,8 @@ class BasicScraper:
             host = self._host(url)
             if host not in self._robots_blocked:
                 self._robots_blocked.add(host)
-                msg = (f"robots.txt on {host} disallows {ROBOTS_AGENT}; skipping. "
-                       "Ask the site owner for permission, then set respect_robots: false "
-                       "with a permission_note on the source.")
+                msg = (f"robots.txt on {host} disallows {ROBOTS_AGENT}; skipping because this "
+                       "deployment opted into robots.txt (crawl.respect_robots: true).")
                 logger.warning(msg)
                 self.errors.append(msg)
         return allowed

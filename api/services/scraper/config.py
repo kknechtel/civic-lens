@@ -312,6 +312,7 @@ USER_AGENT = _os.getenv(
     "SCRAPER_USER_AGENT",
     "CivicLens/0.1 (+https://github.com/kknechtel/civic-lens; public-records indexer)",
 )
-# RFC 9309 robots.txt compliance. On by default; a source may opt out only
-# with a documented permission (Source.permission_note in the profile).
-RESPECT_ROBOTS_TXT = _os.getenv("RESPECT_ROBOTS_TXT", "true").lower() != "false"
+# robots.txt is advisory and these are public records, so it is not consulted
+# by default. A deployment can opt in (crawl.respect_robots: true, or
+# RESPECT_ROBOTS_TXT=true). Either way we identify honestly and rate-limit.
+RESPECT_ROBOTS_TXT = _os.getenv("RESPECT_ROBOTS_TXT", "false").lower() == "true"
