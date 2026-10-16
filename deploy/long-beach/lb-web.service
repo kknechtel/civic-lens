@@ -1,0 +1,22 @@
+[Unit]
+Description=Long Beach civic-lens web (Next.js standalone)
+After=network-online.target lb-api.service
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/long-beach/web/.next/standalone
+Environment=PORT=3102
+Environment=HOSTNAME=127.0.0.1
+Environment=NODE_ENV=production
+Environment=API_URL=http://127.0.0.1:8102
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+MemoryHigh=300M
+MemoryMax=400M
+MemorySwapMax=0
+OOMScoreAdjust=600
+CPUQuota=60%
+
+[Install]
+WantedBy=multi-user.target

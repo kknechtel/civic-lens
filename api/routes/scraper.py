@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models.user import User
-from auth import get_current_user
+from auth import get_admin_user, get_current_user
 
 logger = logging.getLogger(__name__)
 from municipality import get_municipality
@@ -73,7 +73,7 @@ def _run_scraper_in_thread(sites, project_id, user_id, dry_run, historical, trig
 @router.post("/run")
 async def start_scraper(
     req: ScrapeRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_admin_user),  # a full crawl is heavy; admins only
 ):
     """Start the document scraper in the background."""
     from services.scraper.runner import get_scraper_status

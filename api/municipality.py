@@ -211,6 +211,18 @@ class CrawlPolicy(BaseModel):
     proxy: CrawlProxy = Field(default_factory=CrawlProxy)
 
 
+class AccessPolicy(BaseModel):
+    """Who may use this deployment.
+
+    open        — anyone can sign up; Google sign-in creates active accounts.
+    approval    — anyone can sign up, but accounts wait for an admin.
+    invite_only — no signup at all: only existing accounts and invite links.
+                  Every /api request (except sign-in) needs a signed-in user.
+    """
+    model_config = {"extra": "forbid"}
+    mode: Literal["open", "approval", "invite_only"] = "approval"
+
+
 class JurisdictionFile(BaseModel):
     """Raw contents of one jurisdiction.yaml."""
     model_config = {"extra": "forbid"}
@@ -228,6 +240,7 @@ class JurisdictionFile(BaseModel):
     branding: dict[str, Any] = Field(default_factory=dict)
     features: dict[str, bool] = Field(default_factory=dict)
     crawl: dict[str, Any] = Field(default_factory=dict)
+    access: dict[str, Any] = Field(default_factory=dict)
     integrity: dict[str, Any] = Field(default_factory=dict)
     ai: AIContext = Field(default_factory=AIContext)
     search: SearchConfig = Field(default_factory=SearchConfig)
@@ -259,6 +272,7 @@ class Municipality(BaseModel):
     branding: Branding = Field(default_factory=Branding)
     features: Features = Field(default_factory=Features)
     crawl: CrawlPolicy = Field(default_factory=CrawlPolicy)
+    access: AccessPolicy = Field(default_factory=AccessPolicy)
     integrity: dict[str, Any] = Field(default_factory=dict)
     ai: AIContext = Field(default_factory=AIContext)
     events: EventsConfig = Field(default_factory=EventsConfig)
@@ -352,6 +366,7 @@ class Municipality(BaseModel):
             "jurisdictions": self.jurisdictions,
             "records_law": self.state_profile.records_law.model_dump() if self.state_profile else None,
             "suggested_questions": self.ai.suggested_questions,
+            "access_mode": self.access.mode,
         }
 
 
@@ -459,7 +474,7 @@ def load_deployment(name: str, base_dir: Path | None = None) -> Municipality:
     settings: dict[str, Any] = {}
     for p in [*ancestors, root]:
         j = files[p]
-        for key in ("branding", "features", "crawl", "integrity"):
+        for key in ("branding", "features", "crawl", "integrity", "access"):
             settings[key] = _deep_merge(settings.get(key, {}), getattr(j, key))
         if j.fiscal_year:
             settings["fiscal_year"] = j.fiscal_year
@@ -529,6 +544,8 @@ def load_deployment(name: str, base_dir: Path | None = None) -> Municipality:
                                      glossary=state_file.glossary)
 
     branding = {"app_name": f"{rj.short_name or rj.name} Civic Lens", **settings.get("branding", {})}
+    if os.getenv("PUBLIC_ORIGIN"):  # the server's own URL (invite links, share links)
+        branding["public_origin"] = os.environ["PUBLIC_ORIGIN"].rstrip("/")
     if rj.branding.get("app_name"):
         branding["app_name"] = rj.branding["app_name"]
 
@@ -545,6 +562,8 @@ def load_deployment(name: str, base_dir: Path | None = None) -> Municipality:
         "branding": branding,
         "features": settings.get("features", {}),
         "crawl": settings.get("crawl", {}),
+        # ACCESS_MODE in the environment overrides the profile (e.g. a private staging copy).
+        "access": {**settings.get("access", {}), **({"mode": os.environ["ACCESS_MODE"]} if os.getenv("ACCESS_MODE") else {})},
         "integrity": settings.get("integrity", {}),
         "ai": ai,
         "events": {"venues": [v.model_dump() for v in venues]},

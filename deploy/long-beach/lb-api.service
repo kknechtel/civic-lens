@@ -1,0 +1,22 @@
+[Unit]
+Description=Long Beach civic-lens API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/long-beach/api
+EnvironmentFile=/etc/long-beach.env
+ExecStart=/opt/long-beach/api/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8102 --workers 1 --proxy-headers
+Restart=on-failure
+RestartSec=5
+# Shares a 2-vCPU / 4 GB box with Atlantic Highlands: Long Beach is capped and
+# is the first thing the kernel kills under pressure, never ah-api.
+MemoryHigh=550M
+MemoryMax=700M
+MemorySwapMax=0
+OOMScoreAdjust=600
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target

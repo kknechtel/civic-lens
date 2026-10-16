@@ -29,6 +29,9 @@ features:
   presentations: true
   contracts: true
   alerts: true
+# Private deployment: only accounts the owner creates or invites.
+access:
+  mode: invite_only
 entities:
 - key: long_beach
   label: City of Long Beach

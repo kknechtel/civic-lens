@@ -128,6 +128,10 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)):
     re-login), but every gated endpoint will reject them until an admin
     flips is_active=True via /admin/users.
     """
+    from municipality import get_municipality
+    mode = get_municipality().access.mode
+    if mode == "invite_only":
+        raise HTTPException(status_code=403, detail="This site is invite-only. Ask the owner for an invite link.")
     email = req.email.strip().lower()
     if not _EMAIL_RE.match(email):
         raise HTTPException(status_code=400, detail="Enter a valid email address")
@@ -204,7 +208,11 @@ def login_google(req: GoogleLoginRequest, db: Session = Depends(get_db)):
             user.google_id = sub
             logger.info("Linked Google account %s to existing user %s", sub, email)
 
-    # 3) Brand-new user
+    # 3) Brand-new user — only where the deployment allows signups.
+    from municipality import get_municipality
+    mode = get_municipality().access.mode
+    if user is None and mode == "invite_only":
+        raise HTTPException(status_code=403, detail="This site is invite-only. Ask the owner for an invite link.")
     if user is None:
         user = User(
             email=email,
@@ -214,7 +222,7 @@ def login_google(req: GoogleLoginRequest, db: Session = Depends(get_db)):
             google_id=sub,
             picture_url=identity.get("picture"),
             display_name=identity.get("given_name") or identity.get("name"),
-            is_active=True,   # Google-verified email; auto-active for community app
+            is_active=(mode == "open"),  # "approval": waits for an admin like password signups
             is_admin=False,
         )
         db.add(user)

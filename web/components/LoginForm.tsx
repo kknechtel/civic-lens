@@ -83,6 +83,11 @@ export default function LoginForm() {
           <p className="text-sm text-gray-500 text-center mt-1 mb-6">
             {headerSub}
           </p>
+          {municipality.access_mode === "invite_only" && !inviteToken && (
+            <p className="-mt-3 mb-5 rounded-md bg-gray-50 px-3 py-2 text-center text-xs text-gray-600">
+              Private site. Sign in with an existing account or the invite link you were sent.
+            </p>
+          )}
 
           {/* Google Sign-In — primary on events-app, secondary on civic.
               Hide entirely (button + divider) when CLIENT_ID is unset so

@@ -1,0 +1,15 @@
+[Unit]
+Description=Long Beach: fetch original PDFs for imported documents (network only, no OCR)
+After=network-online.target lb-api.service
+
+[Service]
+Type=oneshot
+User=www-data
+WorkingDirectory=/opt/long-beach/api
+EnvironmentFile=/etc/long-beach.env
+ExecStart=/opt/long-beach/api/venv/bin/python -m scripts.rehydrate_files --delay 2
+MemoryMax=400M
+CPUQuota=30%
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=6h

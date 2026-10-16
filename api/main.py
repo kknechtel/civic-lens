@@ -26,6 +26,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Private deployments (access.mode: invite_only): nothing under /api is
+# served to anyone who isn't a signed-in, active user, whatever an individual
+# route's own dependencies say. Sign-in, invite checks and the public town
+# profile (name, colours) stay reachable so the login screen can render.
+_OPEN_PATHS = ("/api/auth/login", "/api/auth/signup", "/api/auth/google", "/api/auth/magic-link", "/api/auth/invite/",
+               "/api/municipality", "/api/health")
+
+
+@app.middleware("http")
+async def private_deployment_gate(request, call_next):
+    from municipality import get_municipality
+    path = request.url.path
+    if (get_municipality().access.mode != "invite_only" or not path.startswith("/api/")
+            or request.method == "OPTIONS" or any(path == p or path.startswith(p) for p in _OPEN_PATHS)):
+        return await call_next(request)
+    from fastapi.responses import JSONResponse
+    from jose import JWTError, jwt
+
+    from config import JWT_ALGORITHM, JWT_SECRET
+    from database import SessionLocal
+    from models.user import User
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return JSONResponse({"detail": "Sign in required"}, status_code=401)
+    try:
+        sub = jwt.decode(auth[7:], JWT_SECRET, algorithms=[JWT_ALGORITHM]).get("sub")
+    except JWTError:
+        return JSONResponse({"detail": "Invalid or expired token"}, status_code=401)
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.id == sub).first() if sub else None
+        ok = bool(user and user.is_active)
+    if not ok:
+        return JSONResponse({"detail": "This site is invite-only"}, status_code=403)
+    return await call_next(request)
+
+
 # Import and register routes
 from routes.auth import router as auth_router
 from routes.documents import router as documents_router

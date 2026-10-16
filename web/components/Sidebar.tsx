@@ -18,7 +18,7 @@ const defaultBrand = "#385854";
 
 type Feature = "financial" | "meetings" | "events" | "presentations" | "contracts" | "alerts" | "integrity";
 
-export const navItems: { name: string; href: string; icon: any; feature?: Feature; children?: { name: string; href: string; icon: any }[] }[] = [
+export const navItems: { name: string; href: string; icon: any; feature?: Feature; adminOnly?: boolean; children?: { name: string; href: string; icon: any }[] }[] = [
   { name: "Dashboard", href: "/", icon: ChartBarIcon },
   { name: "Documents", href: "/document-library", icon: FolderIcon },
   { name: "Integrity", href: "/integrity", icon: ShieldExclamationIcon, feature: "integrity" },
@@ -37,7 +37,7 @@ export const navItems: { name: string; href: string; icon: any; feature?: Featur
   { name: "Meetings", href: "/meetings", icon: MicrophoneIcon, feature: "meetings" },
   { name: "Alerts", href: "/alerts", icon: BellIcon, feature: "alerts" },
   { name: "Presentations", href: "/presentations", icon: PresentationChartLineIcon, feature: "presentations" },
-  { name: "Scraper", href: "/scraper", icon: GlobeAltIcon },
+  { name: "Scraper", href: "/scraper", icon: GlobeAltIcon, adminOnly: true },
 ];
 
 export default function Sidebar() {
@@ -84,7 +84,7 @@ export default function Sidebar() {
 
       {/* Nav — Admin link moved to the bottom panel next to email/logout. */}
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-        {navItems.filter((item) => !item.feature || municipality.features[item.feature]).map((item) => {
+        {navItems.filter((item) => (!item.feature || municipality.features[item.feature]) && (!item.adminOnly || user?.is_admin)).map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
 

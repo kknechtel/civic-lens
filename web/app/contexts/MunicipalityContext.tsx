@@ -35,6 +35,7 @@ export interface Municipality {
   entities: MunicipalityEntity[];
   records_law: { name: string; short: string; citation: string } | null;
   suggested_questions?: string[];
+  access_mode?: "open" | "approval" | "invite_only";
 }
 
 // Shown for the instant before the profile loads (and if the API is down) —
