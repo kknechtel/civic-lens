@@ -1,8 +1,9 @@
 # Web framework
-fastapi==0.115.0
+fastapi==0.143.3
+starlette>=1.3.1  # fastapi leaves it unbounded; older ones carry multipart/DoS CVEs
 uvicorn[standard]==0.30.6
 gunicorn==22.0.0
-python-multipart==0.0.27
+python-multipart==0.0.31
 
 # Database
 sqlalchemy==2.0.32
@@ -13,7 +14,7 @@ alembic==1.13.2
 boto3==1.35.0
 
 # Auth
-python-jose[cryptography]==3.4.0
+PyJWT==2.15.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.0
 google-auth==2.32.0  # Google ID token verification for /api/auth/google
@@ -41,7 +42,7 @@ pymupdf==1.24.10
 pymupdf4llm==0.0.17
 pdfplumber>=0.11.0
 pdf2image>=1.17.0
-Pillow>=10.0.0
+Pillow>=12.3.0
 pytesseract>=0.3.10  # Tier 2 of the OCR cascade — needs the `tesseract` system binary
 reportlab>=4.2.0  # OPRA request PDF generation (mirrors NJ DCA model form)
 
@@ -70,9 +71,9 @@ playwright==1.45.0
 
 # Utilities
 python-dotenv==1.2.2
-aiohttp==3.13.4
+aiohttp==3.14.3
 aiofiles==24.1.0
 httpx==0.27.0
 # Free local embeddings (EMBEDDINGS_PROVIDER=local/auto, no API key). ~130 MB model download on first use.
 fastembed>=0.4
-cryptography>=42  # stored API keys (services/ai/crypto.py)
+cryptography>=49.0.0  # stored API keys (services/ai/crypto.py)

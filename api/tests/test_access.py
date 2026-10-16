@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture()
-def client(monkeypatch):
+def client(monkeypatch, db_schema):
     monkeypatch.setenv("ACCESS_MODE", "invite_only")
     import municipality
     municipality.get_municipality.cache_clear()

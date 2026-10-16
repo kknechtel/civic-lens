@@ -42,7 +42,8 @@ async def private_deployment_gate(request, call_next):
             or request.method == "OPTIONS" or any(path == p or path.startswith(p) for p in _OPEN_PATHS)):
         return await call_next(request)
     from fastapi.responses import JSONResponse
-    from jose import JWTError, jwt
+    import jwt
+    from jwt import PyJWTError as JWTError
 
     from config import JWT_ALGORITHM, JWT_SECRET
     from database import SessionLocal
