@@ -52,6 +52,20 @@ class BrowserPages:
         self._page = self._ctx.new_page()
         return self
 
+    def capture_json(self, url_fragment: str) -> list:
+        """Collect JSON bodies of responses whose URL contains `url_fragment`
+        (the page's own API calls, made with its own headers and cookies)."""
+        bucket: list = []
+
+        def on_response(r):
+            if url_fragment in r.url and "json" in (r.headers.get("content-type") or ""):
+                try:
+                    bucket.append(r.json())
+                except Exception:
+                    pass
+        self._page.on("response", on_response)
+        return bucket
+
     def get(self, url: str) -> str | None:
         try:
             self._page.goto(url, wait_until="domcontentloaded", timeout=60000)
@@ -62,7 +76,23 @@ class BrowserPages:
             else:
                 logger.warning("challenge not cleared for %s", url)
                 return None
-            self._page.wait_for_timeout(1000)
+            # Listings can render after load (or after a throttled first paint):
+            # wait for document links, but return what's there if none appear.
+            try:
+                self._page.wait_for_selector("a[href*='/document/']", timeout=8000)
+                # Long lists render in batches: wait until the count stops growing.
+                last, stable = -1, 0
+                for _ in range(30):
+                    n = self._page.locator("a[href*='/document/']").count()
+                    stable = stable + 1 if n == last else 0
+                    if stable >= 2:
+                        break
+                    last = n
+                    self._page.mouse.wheel(0, 20000)
+                    self._page.wait_for_timeout(1500)
+            except Exception:
+                pass
+            self._page.wait_for_timeout(500)
             return self._page.content()
         except Exception as exc:
             logger.warning("browser fetch failed for %s: %s", url, exc)
@@ -80,6 +110,15 @@ class BrowserPages:
                     getattr(obj, meth)()
             except Exception:
                 pass
+
+
+def api_documents(payloads: list) -> list[dict]:
+    """Documents from the library's own JSON (`/api/<code>/pub-doc/type/<id>`),
+    which carries the full list; the rendered page shows only part of it."""
+    for body in reversed(payloads):
+        if isinstance(body, dict) and isinstance(body.get("documents"), list):
+            return body["documents"]
+    return []
 
 
 class Ecode360Adapter(SourceAdapter):
@@ -106,15 +145,31 @@ class Ecode360Adapter(SourceAdapter):
         base = "https://ecode360.com"
         found: list[dict] = []
         with BrowserPages() as browser:
+            api = browser.capture_json("/pub-doc/type/")
             for cat, doc_type in cats.items():
                 url = f"{base}/{customer}/documents/{cat}"
+                api.clear()
                 html = browser.get(url)
                 if not html:
                     self.basic.errors.append(f"{self.source.id}: could not load {url}")
                     continue
-                soup = BeautifulSoup(html, "html.parser")
                 n = 0
-                for a in soup.find_all("a", href=True):
+                for d in api_documents(api):
+                    if not d.get("id") or d.get("private"):
+                        continue
+                    year = int(str(d.get("date") or "0")[:4] or 0)
+                    if min_year and year and year < min_year:
+                        continue
+                    item = {"url": f"{base}/{customer}/document/{d['id']}.{d.get('extension') or 'pdf'}",
+                            "title": f"{cat.replace('_', ' ').rstrip('.')} — {' '.join((d.get('title') or '').split())}",
+                            "source_page": url, "doc_date": d.get("date")}
+                    if doc_type:
+                        item["doc_type"] = doc_type
+                    found.append(item)
+                    n += 1
+                soup = BeautifulSoup(html, "html.parser")
+                # Fallback: links in the rendered page, if the API response didn't arrive.
+                for a in ([] if n else soup.find_all("a", href=True)):
                     href = a["href"]
                     if "/document/" not in href or ".pdf" not in href.lower():
                         continue
