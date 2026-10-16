@@ -60,9 +60,14 @@ glossary:
 # Services — confirm against the current DLGS Local Finance Notice.
 integrity:
   bid_threshold:
-    purchase: 44000
-    public_works: 44000
-    citation: N.J.S.A. 40A:11-3 / 40A:11-4 — $44,000 with a Qualified Purchasing Agent ($32,000 without), per the 2020 adjustment; verify the current DLGS notice
+    # Units with a Qualified Purchasing Agent (most towns). Without a QPA the LPCL cap is $17,500.
+    purchase: 53000
+    public_works: 53000
+    history:
+    - {from: '2015-07-01', purchase: 40000, public_works: 40000}
+    - {from: '2020-07-01', purchase: 44000, public_works: 44000}
+    - {from: '2025-07-01', purchase: 53000, public_works: 53000}
+    citation: N.J.S.A. 40A:11-3 — $53,000 with a QPA from July 1, 2025 (LFN 2025-08); $44,000 from 2020, $40,000 from 2015
   emergency:
     citation: N.J.S.A. 40A:11-6 and N.J.A.C. 5:34-6 — emergency contracts need a written certification and a report to the governing body at its next meeting
   near_threshold_ratio: 0.85

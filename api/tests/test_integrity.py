@@ -500,3 +500,14 @@ def test_emergency_after_planning_on_real_resolutions():
     flags = run_rules(Ctx(awards=awards, config=NJ_P2P), only=["emergency_after_planning"])
     assert len(flags) == 1 and flags[0].severity == "medium" and "≥42 days" in flags[0].title  # lower bound
     assert flags[0].evidence[0]["document_id"] == "wall_engineering"
+
+
+def test_bid_threshold_follows_award_date():
+    cfg = {**NJ_P2P, "bid_threshold": {"purchase": 53000, "history": [
+        {"from": "2020-07-01", "purchase": 44000}, {"from": "2025-07-01", "purchase": 53000}]}}
+    ctx = Ctx(awards=[], config=cfg)
+    assert ctx.threshold({"meeting_date": date(2025, 6, 30)}) == 44000
+    assert ctx.threshold({"meeting_date": date(2025, 7, 1)}) == 53000
+    flags = run_rules(Ctx(awards=[_nj_award(procurement="no_bid", amount=46000, meeting_date=date(2026, 3, 1))], config=cfg),
+                      only=["near_threshold"])
+    assert flags and "$53,000.00" in flags[0].title  # 87% of $53k; under the old $44k it would be over

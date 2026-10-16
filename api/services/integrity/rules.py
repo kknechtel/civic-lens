@@ -121,7 +121,12 @@ class Ctx:
         return node
 
     def threshold(self, award: dict) -> float:
-        bt = self.cfg("bid_threshold", default={}) or {}
+        bt = dict(self.cfg("bid_threshold", default={}) or {})
+        # Thresholds are re-indexed periodically; use the one in force on the award date.
+        when = award.get("meeting_date")
+        for step in sorted(bt.get("history") or [], key=lambda h: str(h["from"])):
+            if when and str(when) >= str(step["from"]):
+                bt.update({k: v for k, v in step.items() if k != "from"})
         if _PUBLIC_WORKS.search(f"{award.get('title') or ''} {award.get('quote') or ''}"):
             return float(bt.get("public_works") or bt.get("purchase") or 35000)
         return float(bt.get("purchase") or 35000)
