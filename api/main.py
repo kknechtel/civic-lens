@@ -1,7 +1,7 @@
 """
 Civic Lens - Main FastAPI Application
 Document library, meetings, and financial analysis for one municipality
-(selected by the MUNICIPALITY env var; see municipalities/).
+(selected by the DEPLOYMENT env var — a city, county or state; see jurisdictions/).
 """
 import logging
 from fastapi import FastAPI
@@ -49,6 +49,7 @@ from routes.alerts import router as alerts_router
 from routes.event_submissions import router as event_submissions_router
 from routes.event_ingest import router as event_ingest_router
 from routes.municipality import router as municipality_router
+from routes.integrity import router as integrity_router
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(documents_router, prefix="/api/documents", tags=["documents"])
@@ -72,6 +73,7 @@ app.include_router(alerts_router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(event_submissions_router, prefix="/api/event-submissions", tags=["event-submissions"])
 app.include_router(event_ingest_router, prefix="/api/event-ingest", tags=["event-ingest"])
 app.include_router(municipality_router, prefix="/api/municipality", tags=["municipality"])
+app.include_router(integrity_router, prefix="/api/integrity", tags=["integrity"])
 
 
 @app.on_event("startup")

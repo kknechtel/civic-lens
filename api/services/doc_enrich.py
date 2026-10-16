@@ -7,7 +7,7 @@ scraped from a neighbouring town's site that is clearly about the primary
 municipality gets that municipality's entity key.
 
 The list of governments ("entities") and the wording of the prompt come from
-the active municipality profile (municipalities/<slug>/municipality.yaml).
+the active deployment (jurisdictions/**/jurisdiction.yaml).
 
 Writes overwrite scraper guesses unless the field is listed in
 metadata.locked_fields (set when a person edits it in the UI).

@@ -1,0 +1,34 @@
+# Nassau County. Deploy at this level (DEPLOYMENT=us/ny/nassau) to index the county and every
+# town configured beneath it.
+name: County of Nassau
+short_name: Nassau County
+level: county
+government_type: county
+entities:
+- key: ny:nassau
+  label: Nassau County
+  short: County
+  kind: county
+  description: Nassau County government — Legislature, County Executive, Department of Assessment, Nassau County
+    Police
+  aliases:
+  - nassau county
+  - county of nassau
+  legacy_keys:
+  - nassau
+sources:
+- id: legislature
+  label: County Legislature agendas & minutes
+  adapter: html_index
+  entity: ny:nassau
+  description: 'CivicPlus Agenda Center: full, committee, special, finance, budget review, planning commission'
+  params:
+    start_urls:
+    - https://www.nassaucountyny.gov/agendacenter
+    link_pattern: /AgendaCenter/ViewFile/(Agenda|Minutes)/_\d{8}-\d+$
+    title_from: row
+    doc_type_rules:
+    - pattern: /Minutes/
+      doc_type: minutes
+    - pattern: /Agenda/
+      doc_type: agenda

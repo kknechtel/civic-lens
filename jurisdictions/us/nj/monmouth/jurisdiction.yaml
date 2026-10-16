@@ -1,0 +1,12 @@
+name: County of Monmouth
+short_name: Monmouth County
+level: county
+government_type: county
+entities:
+- key: nj:monmouth
+  label: Monmouth County
+  short: County
+  kind: county
+  description: Monmouth County government or other regional bodies
+  legacy_keys:
+  - regional

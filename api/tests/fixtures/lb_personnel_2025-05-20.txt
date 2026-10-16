@@ -1,0 +1,60 @@
+LAST
+FIRST
+DEPARTMENT
+ACTION
+CURRENT POSITION
+CURRENT SALARY
+NEW POSITION
+NEW SALARY
+EFFECTIVE
+Miller 
+William
+Beach Maintenance
+Appointed
+Beach Cleaner
+$10.00/hr 5/22/2025
+Acquavita
+Aaron
+Beach Park
+Appointed
+Gate Attendant
+$10.00/hr 5/22/2025
+Amenta
+Gabriella
+Beach Park
+Appointed
+Gate Attendant
+$10.00/hr 5/22/2025
+Boone Jr
+Wesley
+Beach Park
+Appointed
+Gate Attendant
+$10.00/hr 5/22/2025
+Bullaro 
+Peter 
+Beach Park
+Appointed
+Gate Attendant
+$10.00/hr 5/22/2025
+Cangelosi
+Juliette
+Beach Park
+Appointed
+Gate Attendant
+$10.00/hr 5/22/2025
+Capria
+Christian 
+Beach Park
+Appointed
+Gate Attendant
+$10.00/hr 5/22/2025
+Cuertin
+Brendan
+Beach Park
+Appointed
+Gate Attendant
+$10.00/hr 5/22/2025
+Dehler
+Emma
+Beach Park

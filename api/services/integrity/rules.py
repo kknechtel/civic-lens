@@ -1,0 +1,522 @@
+"""
+Red-flag rules over extracted facts.
+
+Each rule is a pure function: (Context) -> list[Flag]. They run on plain dicts
+so they can be tested without a database. Thresholds and citations come from
+the deployment's `integrity` config (set per state in jurisdictions/us/<st>/).
+
+Flags are leads, not findings. Every flag says what pattern was seen, why it
+matters, the common innocent explanations, and cites the documents.
+"""
+from __future__ import annotations
+
+import hashlib
+import re
+from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import date, timedelta
+from typing import Any, Callable
+
+SEV_RANK = {"low": 1, "medium": 2, "high": 3}
+
+COMPETITIVE = {"competitive_bid", "rfp", "state_contract"}
+NONCOMPETITIVE = {"professional_services", "no_bid", "sole_source", "unknown"}
+SPEND = {"contract", "purchase", "change_order", "other"}
+
+_PUBLIC_WORKS = re.compile(r"construct|reconstruct|repair|paving|install|renovat|rehabilitat|demolition|"
+                           r"replace(?:ment)?\s+of|roof|sewer|water\s+main|drainage|bulkhead|boardwalk", re.I)
+
+# Most frequent US surnames (Census 2010 top ~120) — a match on these says little.
+COMMON_SURNAMES = set("""smith johnson williams brown jones garcia miller davis rodriguez martinez hernandez lopez
+gonzalez wilson anderson thomas taylor moore jackson martin lee perez thompson white harris sanchez clark ramirez
+lewis robinson walker young allen king wright scott torres nguyen hill flores green adams nelson baker hall rivera
+campbell mitchell carter roberts gomez phillips evans turner diaz parker cruz edwards collins reyes stewart morris
+morales murphy cook rogers gutierrez ortiz morgan cooper peterson bailey reed kelly howard ramos kim cox ward
+richardson watson brooks chavez wood james bennett gray mendoza ruiz hughes price alvarez castillo sanders patel
+myers long ross foster jimenez powell jenkins perry russell sullivan bell coleman butler henderson barnes gonzales
+fisher vasquez simmons romero jordan patterson alexander hamilton graham reynolds griffin wallace moreno west cole
+hayes bryant herrera gibson ellis tran medina aguilar stevens murray ford castro marshall owens harrison fernandez
+mcdonald woods washington kennedy wells vargas henry chen freeman webb tucker guzman burns crawford olson simpson
+porter hunter gordon mendez silva shaw snyder mason dixon munoz hunt hicks holmes palmer wagner black robertson
+boyd rose stone salazar fox warren mills meyer rice schmidt garza daniels ferguson nichols stephens soto weaver
+ryan gardner payne grant dunn kelley spencer hawkins arnold pierce vazquez hansen peters santos hart bradley knight
+elliott cunningham duncan armstrong hudson carroll lane riley andrews alvarado ray delgado berry perkins hoffman
+johnston matthews pena richards contreras willis carpenter lawrence sandoval guerrero george chapman rios estrada
+ortega watkins greene nunez wheeler valdez harper burke larson santiago maldonado morrison franklin carlson austin
+dominguez carr lawson jacobs obrien lynch singh vega bishop montgomery oliver jensen harvey williamson gilbert
+dean sims espinoza howell li wong reid hanson le mccoy garrett burton fuller wang weber welch rojas lucas marquez
+fields park yang little banks padilla day walsh bowman schultz luna fowler mejia davidson acosta brewer may holland
+juarez newman pearson curtis cortez douglas schneider joseph barrett navarro figueroa keller avila wade molina
+stanley hopkins campos barnett bates chambers caldwell beck lambert miranda byrd craig ayala lowe frazier powers
+neal leonard gregory carrillo sutton fleming rhodes shelton schwartz norris jennings watts duran walters cohen
+mcdaniel moran parks steele vaughn becker holt deleon barker terry hale leon hail benson haynes horton miles lyons
+pham graves bush thornton wolfe warner cabrera mckinney mann zimmerman dawson lara fletcher page mccarthy love
+robles cervantes solis erickson reeves chang klein salinas fuentes baldwin daniel simon velasquez hardy higgins
+aguirre lin cummings chandler sharp barber bowen ochoa dennis robbins liu ramsey francis griffith paul blair oconnor
+cardenas pacheco cross calderon quinn moss swanson chan rivas khan rodgers serrano fitzgerald rosales stevenson
+christensen manning gill curry mclaughlin harmon mcgee gross doyle garner newton burgess reese walton blake trujillo
+adkins brady goodman roman webster goodwin fischer huang potter delacruz montoya todd wu hines mullins castaneda
+malone cannon tate mack sherman hubbard hodges zhang guerra wolf valencia saunders franco rowe gallagher farmer
+hammond hampton townsend ingram wise gallegos clarke barton schroeder maxwell waters logan camacho strickland
+norman person colon parsons frank harrington glover osborne buchanan casey floyd patton ibarra ball tyler suarez
+bowers orozco salas cobb gibbs andrade bauer conner moody escobar mcguire lloyd mueller hartman french kramer
+mcbride pope lindsey velazquez norton mccormick sparks flynn yates hogan marsh macias villanueva zamora pratt
+stokes owen ballard lang brock villarreal charles drake barrera cain patrick pineda burnett mercado santana shepherd
+bautista ali shaffer lamb trevino mckenzie hess beil olsen cochran morton nash wilkins petersen briggs shah roth
+nicholson holloway lozano rangel flowers hoover short arias mora valenzuela bryan meyers weiss underwood bass
+greer summers houston carson morrow clayton whitaker decker yoder collier zuniga carey wilcox melendez poole
+roberson larsen conley davenport copeland massey lam huff rocha cameron jefferson hood monroe anthony pittman
+huynh randall singleton kirk combs mathis christian skinner bradford richard galvan wall boone kirby wilkinson
+bridges bruce atkinson velez meza roy vincent york hodge villa abbott allison tapia gates chase sosa sweeney
+farrell wyatt dalton horn barron phelps yu dickerson heath foley atkins mathews bonilla acevedo benitez zavala
+hensley glenn cisneros harrell shields rubio huffman choi boyer garrison arroyo bond kane hancock callahan dillon
+cline wiggins grimes arellano melton oneill savage ho beltran pitts parrish ponce rich booth koch golden ware
+brennan mcdowell marks cantu humphrey baxter sawyer clay tanner hutchinson kaur berg wiley gilmore russo villegas
+hobbs keith wilkerson ahmed beard mcclain montes mata rosario vang walter henson oneal mosley mcclure beasley
+stephenson snow huerta preston vance barry johns eaton blackwell dyer prince macdonald solomon guevara stafford
+english hurst woodard cortes shannon kemp nolan mccullough merritt murillo moon salgado strong kline cordova
+barajas roach rosas winters jacobson lester knox bullock kerr leach meadows orr davila whitehead pruitt kent
+conway mckee barr david dejesus marin berger mcintyre blankenship gaines palacios cuevas bartlett durham dorsey
+mccall odonnell stein browning stout lowery sloan mclean hendricks calhoun sexton chung gentry hull duarte ellison
+nielsen gillespie buck middleton sellers leblanc esparza hardin bradshaw mcintosh howe livingston frost glass
+morse knapp herman stark bravo noble spears weeks corona frederick buckley mcfarland hebert enriquez hickman
+quintero randolph schaefer walls trejo house reilly pennington michael conrad giles benjamin crosby fitzpatrick
+donovan mays mahoney valentine raymond medrano hahn mcmillan small bentley felix peck lucero boyle hanna pace
+rush hurley harding mcconnell bernal nava ayers everett ventura avery pugh mayer bender shepard mcmahon landry
+case sampson moses magana blackburn dunlap gould duffy vaughan herring mckay espinosa rivers farley bernard ashley
+friedman potts truong costa correa blevins nixon clements fry delarosa best benton lugo portillo dougherty
+crane haley phan villalobos blanchard horne finley quintana lynn esquivel bean dodson mullen xiong hayden cano
+levy huber richmond moyer lim frye sheppard mccarty avalos booker waller parra woodward jaramillo krueger rasmussen
+brandt peralta donaldson stuart faulkner maynard galindo coffey estes sanford burch maddox vo oconnell vu andersen
+spence mcpherson church schmitt stanton leal cherry compton dudley sierra pollard alfaro hester proctor lu hinton
+novak good madden mccann terrell jarvis dickson reyna cantrell mayo branch hendrix rollins rowland whitney duke
+odom daugherty travis tang archer""".split())
+
+
+@dataclass
+class Ctx:
+    awards: list[dict]
+    personnel: list[dict] = field(default_factory=list)
+    officials: list[dict] = field(default_factory=list)
+    contributions: list[dict] = field(default_factory=list)
+    oversight_docs: list[dict] = field(default_factory=list)  # {document_id, title, text, url, entity_key}
+    config: dict = field(default_factory=dict)  # deployment.integrity
+    docs: dict = field(default_factory=dict)  # document_id -> {title, url}
+
+    def cfg(self, *path, default=None):
+        node: Any = self.config
+        for p in path:
+            if not isinstance(node, dict) or p not in node:
+                return default
+            node = node[p]
+        return node
+
+    def threshold(self, award: dict) -> float:
+        bt = self.cfg("bid_threshold", default={}) or {}
+        if _PUBLIC_WORKS.search(f"{award.get('title') or ''} {award.get('quote') or ''}"):
+            return float(bt.get("public_works") or bt.get("purchase") or 35000)
+        return float(bt.get("purchase") or 35000)
+
+    def cite(self, key: str) -> str:
+        c = self.cfg(key, "citation", default="")
+        return f" ({c})" if c else ""
+
+
+@dataclass
+class Flag:
+    rule: str
+    severity: str
+    title: str
+    explanation: str
+    subject: str | None
+    entity_key: str | None
+    amount: float | None
+    evidence: list[dict]
+    score: float = 0.0
+    scope: str = ""  # extra fingerprint discriminator
+
+    @property
+    def fingerprint(self) -> str:
+        raw = f"{self.rule}|{self.entity_key}|{(self.subject or '').lower()}|{self.scope}"
+        return hashlib.sha1(raw.encode()).hexdigest()
+
+
+def _money(x: float | None) -> str:
+    return f"${x:,.2f}" if x is not None else "an unstated amount"
+
+
+def _ev(ctx: Ctx, a: dict) -> dict:
+    d = ctx.docs.get(str(a.get("document_id")), {})
+    return {"document_id": str(a.get("document_id")), "title": d.get("title"), "url": d.get("url"),
+            "page": a.get("page"), "date": str(a.get("meeting_date") or ""), "quote": a.get("quote"),
+            "amount": a.get("amount"), "item": a.get("item_no")}
+
+
+def _vendor_label(group: list[dict]) -> str:
+    names = [a.get("vendor_name") for a in group if a.get("vendor_name")]
+    return max(set(names), key=names.count) if names else "Unknown vendor"
+
+
+def _by_vendor(awards: list[dict], pred: Callable[[dict], bool]) -> dict[tuple, list[dict]]:
+    groups: dict[tuple, list[dict]] = defaultdict(list)
+    for a in awards:
+        if a.get("vendor_norm") and pred(a):
+            groups[(a.get("entity_key"), a["vendor_norm"])].append(a)
+    for g in groups.values():
+        g.sort(key=lambda a: a.get("meeting_date") or date.min)
+    return groups
+
+
+# ── Rules ────────────────────────────────────────────────────────────────────
+
+def near_threshold(ctx: Ctx) -> list[Flag]:
+    ratio = float(ctx.cfg("near_threshold_ratio", default=0.85))
+    out = []
+    for a in ctx.awards:
+        if a.get("action_type") not in SPEND or a.get("procurement") in COMPETITIVE or not a.get("amount"):
+            continue
+        t = ctx.threshold(a)
+        if ratio * t <= a["amount"] < t:
+            out.append(Flag(
+                "near_threshold", "medium",
+                f"{_money(a['amount'])} award just under the {_money(t)} bid threshold — {a.get('vendor_name') or 'vendor not named'}",
+                f"Awarded without documented competitive bidding at {a['amount'] / t:.0%} of the bid threshold"
+                f"{ctx.cite('bid_threshold')}. Amounts parked just below a threshold can be a way to avoid "
+                "advertising. Innocent explanations: a genuine quote, or bidding the record doesn't mention.",
+                a.get("vendor_name"), a.get("entity_key"), a["amount"], [_ev(ctx, a)],
+                score=a["amount"] / t, scope=f"{a.get('document_id')}:{a.get('item_no')}",
+            ))
+    return out
+
+
+def split_purchases(ctx: Ctx) -> list[Flag]:
+    window = int(ctx.cfg("split_window_days", default=90))
+    out = []
+    groups = _by_vendor(ctx.awards, lambda a: a.get("action_type") in SPEND and a.get("procurement") not in COMPETITIVE
+                        and a.get("amount") and a.get("meeting_date"))
+    for (entity, vnorm), g in groups.items():
+        used = set()
+        for i, a in enumerate(g):
+            if i in used:
+                continue
+            t = ctx.threshold(a)
+            if a["amount"] >= t:
+                continue
+            cluster = [j for j in range(i, len(g)) if g[j]["meeting_date"] - a["meeting_date"] <= timedelta(days=window)
+                       and g[j]["amount"] < ctx.threshold(g[j])]
+            total = sum(g[j]["amount"] for j in cluster)
+            if len(cluster) >= 2 and total >= t:
+                used.update(cluster)
+                items = [g[j] for j in cluster]
+                out.append(Flag(
+                    "split_purchases", "high",
+                    f"{len(items)} sub-threshold awards to {_vendor_label(items)} totalling {_money(total)} within {window} days",
+                    f"Each award is under the {_money(t)} bid threshold{ctx.cite('bid_threshold')}, but together they "
+                    "exceed it. Splitting one need into several purchases to avoid bidding is a classic procurement "
+                    "red flag. Innocent explanations: genuinely separate needs, or an annual contract paid in parts.",
+                    _vendor_label(items), entity, total, [_ev(ctx, x) for x in items],
+                    score=total / t, scope=str(a["meeting_date"]),
+                ))
+    return out
+
+
+def emergency_procurement(ctx: Ctx) -> list[Flag]:
+    out = []
+    groups = _by_vendor(ctx.awards, lambda a: a.get("procurement") == "emergency")
+    unnamed = [a for a in ctx.awards if a.get("procurement") == "emergency" and not a.get("vendor_norm")]
+    for (entity, vnorm), g in list(groups.items()) + [((a.get("entity_key"), f"unnamed:{a.get('document_id')}:{a.get('item_no')}"), [a]) for a in unnamed]:
+        total = sum(a.get("amount") or 0 for a in g)
+        t = ctx.threshold(g[0])
+        sev = "high" if len(g) >= 2 or total >= 2 * t else "medium"
+        out.append(Flag(
+            "emergency_procurement", sev,
+            f"{'Repeated e' if len(g) > 1 else 'E'}mergency procurement: {_vendor_label(g)} — {len(g)} award(s), {_money(total)}",
+            f"Emergency procurement skips normal bidding{ctx.cite('emergency')}. It is legitimate for genuine "
+            "emergencies; repeated or large emergency awards to the same vendor, or 'emergencies' that were "
+            "foreseeable, deserve a look at the documentation and timeline.",
+            _vendor_label(g), entity, total, [_ev(ctx, a) for a in g], score=SEV_RANK[sev] + total / t / 10,
+        ))
+    return out
+
+
+def noncompetitive_concentration(ctx: Ctx) -> list[Flag]:
+    months = int(ctx.cfg("concentration_months", default=24))
+    min_count = int(ctx.cfg("concentration_min_awards", default=3))
+    out = []
+    groups = _by_vendor(ctx.awards, lambda a: a.get("action_type") in SPEND and a.get("procurement") in NONCOMPETITIVE)
+    for (entity, vnorm), g in groups.items():
+        latest = max((a.get("meeting_date") or date.min) for a in g)
+        recent = [a for a in g if (a.get("meeting_date") or date.min) >= latest - timedelta(days=30 * months)]
+        total = sum(a.get("amount") or 0 for a in recent)
+        t = ctx.threshold(recent[0]) if recent else 35000
+        if len(recent) >= min_count or total >= 3 * t:
+            sev = "high" if total >= 5 * t else "medium"
+            out.append(Flag(
+                "noncompetitive_concentration", sev,
+                f"{_vendor_label(recent)}: {len(recent)} awards without documented competition, {_money(total)} in {months} months",
+                "Repeated awards to one vendor through professional-services, no-bid, sole-source or undocumented "
+                "procurement concentrate spending outside competition. Professional services are often legally "
+                "exempt from bidding, so check whether the vendor was chosen through any RFP/RFQ process and "
+                "whether its principals are connected to decision-makers or donors.",
+                _vendor_label(recent), entity, total, [_ev(ctx, a) for a in recent],
+                score=total / t, scope=f"{months}m",
+            ))
+    return out
+
+
+def single_bid(ctx: Ctx) -> list[Flag]:
+    out = []
+    for a in ctx.awards:
+        if a.get("procurement") in ("competitive_bid", "rfp") and a.get("bids_received") == 1:
+            out.append(Flag(
+                "single_bid", "medium",
+                f"Only one bid received — {a.get('vendor_name') or 'vendor not named'}, {_money(a.get('amount'))}",
+                "A competitive process that draws a single response may have been narrowly specified, "
+                "poorly advertised, or steered. Compare the specs and the advertisement period.",
+                a.get("vendor_name"), a.get("entity_key"), a.get("amount"), [_ev(ctx, a)],
+                score=2, scope=f"{a.get('document_id')}:{a.get('item_no')}",
+            ))
+    return out
+
+
+def duplicate_award(ctx: Ctx) -> list[Flag]:
+    out = []
+    window = int(ctx.cfg("duplicate_window_days", default=60))
+    groups = _by_vendor(ctx.awards, lambda a: a.get("action_type") in SPEND and (a.get("amount") or 0) >= 1000)
+    for (entity, vnorm), g in groups.items():
+        for i, a in enumerate(g):
+            for b in g[i + 1:]:
+                if (a["amount"] == b["amount"] and a.get("document_id") != b.get("document_id")
+                        and a.get("meeting_date") and b.get("meeting_date")
+                        and abs((b["meeting_date"] - a["meeting_date"]).days) <= window):
+                    out.append(Flag(
+                        "duplicate_award", "medium",
+                        f"Same amount authorized twice for {_vendor_label([a, b])}: {_money(a['amount'])}",
+                        f"Identical vendor and amount in two separate actions within {window} days. Could be a "
+                        "duplicate payment, or a re-adopted/corrected resolution. Check the claims/warrant registers.",
+                        _vendor_label([a, b]), entity, a["amount"], [_ev(ctx, a), _ev(ctx, b)],
+                        score=2, scope=f"{a.get('meeting_date')}:{b.get('meeting_date')}:{a['amount']}",
+                    ))
+    return out
+
+
+def payouts(ctx: Ctx) -> list[Flag]:
+    review = float(ctx.cfg("payout_review_amount", default=25000))
+    out = []
+    by_fy: dict[tuple, list[dict]] = defaultdict(list)
+    for a in ctx.awards:
+        if a.get("action_type") != "payout" or not a.get("amount"):
+            continue
+        by_fy[(a.get("entity_key"), a.get("fiscal_year") or "unknown")].append(a)
+        if a["amount"] >= review:
+            out.append(Flag(
+                "payout", "medium",
+                f"{_money(a['amount'])} separation/termination payout funding",
+                "Large separation, terminal-leave or accrued-time payouts are contractual in many places but "
+                "have repeatedly been the vehicle for improper 'golden parachutes'. Check who is being paid, "
+                "the contract clause, and whether the amount matches accrued balances.",
+                None, a.get("entity_key"), a["amount"], [_ev(ctx, a)],
+                score=a["amount"] / review, scope=f"{a.get('document_id')}:{a.get('item_no')}",
+            ))
+    for (entity, fy), g in by_fy.items():
+        total = sum(a["amount"] for a in g)
+        if total >= 4 * review and len(g) > 1:
+            out.append(Flag(
+                "payout_total", "high" if total >= 10 * review else "medium",
+                f"Fiscal year {fy}: {_money(total)} moved to fund payouts across {len(g)} actions",
+                "Aggregate payout funding for the year. Compare with prior years and with headcount changes.",
+                f"FY {fy}", entity, total, [_ev(ctx, a) for a in g], score=total / review, scope=fy,
+            ))
+    return out
+
+
+def change_order_growth(ctx: Ctx) -> list[Flag]:
+    cap = float(ctx.cfg("change_order", "cap_pct", default=20))
+    out = []
+    groups = _by_vendor(ctx.awards, lambda a: a.get("action_type") in ("contract", "purchase", "change_order"))
+    for (entity, vnorm), g in groups.items():
+        base = max((a.get("amount") or 0 for a in g if a["action_type"] != "change_order"), default=0)
+        cos = [a for a in g if a["action_type"] == "change_order"]
+        added = sum(a.get("amount") or 0 for a in cos)
+        if base and cos and added / base * 100 > cap:
+            pct = added / base * 100
+            out.append(Flag(
+                "change_order_growth", "high" if pct > 2 * cap else "medium",
+                f"{_vendor_label(g)}: change orders add {pct:.0f}% to a {_money(base)} contract",
+                f"Change orders above {cap:.0f}% of the original award{ctx.cite('change_order')} can mean a "
+                "low-ball bid recovered after award. Check whether the added work was foreseeable at bid time.",
+                _vendor_label(g), entity, added, [_ev(ctx, a) for a in g], score=pct / cap,
+            ))
+    return out
+
+
+def nepotism_surname(ctx: Ctx) -> list[Flag]:
+    officials: dict[tuple, dict] = {}
+    for o in ctx.officials:
+        ln = (o.get("last_name") or "").lower()
+        if ln and ln not in COMMON_SURNAMES:
+            officials[(o.get("entity_key"), ln)] = o
+    counts = defaultdict(int)
+    for p in ctx.personnel:
+        counts[(p.get("last_name") or "").lower()] += 1
+    out = []
+    for p in ctx.personnel:
+        ln = (p.get("last_name") or "").lower()
+        o = officials.get((p.get("entity_key"), ln))
+        if not o or counts[ln] > 3:
+            continue
+        out.append(Flag(
+            "official_surname_hire", "low",
+            f"Personnel action for {p.get('first_name')} {p.get('last_name')} ({p.get('position') or p.get('department')}) "
+            f"shares a surname with {o.get('role') or 'official'} {o.get('name')}",
+            "A hire or promotion sharing an uncommon surname with a sitting official. Usually coincidence; "
+            "worth confirming no family relationship (most ethics codes require recusal and disclosure).",
+            f"{p.get('first_name')} {p.get('last_name')}", p.get("entity_key"), None,
+            [{"document_id": str(p.get("document_id")), "title": ctx.docs.get(str(p.get("document_id")), {}).get("title"),
+              "page": p.get("page"), "quote": p.get("quote")}],
+            score=1, scope=f"{p.get('document_id')}",
+        ))
+    return out
+
+
+def _tokens(s: str) -> set[str]:
+    return {t for t in (s or "").split() if len(t) > 2}
+
+
+def pay_to_play(ctx: Ctx) -> list[Flag]:
+    if not ctx.contributions:
+        return []
+    p2p = ctx.cfg("pay_to_play", default={}) or {}
+    window = int(p2p.get("window_days", 365))
+    min_contrib = float(p2p.get("contribution_threshold", 0))
+    min_contract = float(p2p.get("contract_threshold", 0))
+    statutory = bool(p2p.get("statutory"))
+    by_name: dict[str, list[dict]] = defaultdict(list)
+    for c in ctx.contributions:
+        for key in (c.get("contributor_norm"), c.get("employer_norm")):
+            if key:
+                by_name[key].append(c)
+    out = []
+    groups = _by_vendor(ctx.awards, lambda a: a.get("action_type") in SPEND and (a.get("amount") or 0) >= min_contract)
+    for (entity, vnorm), g in groups.items():
+        matches = list(by_name.get(vnorm, []))
+        if not matches:  # token containment: "d and b engineers and architects" vs "d and b engineers"
+            vt = _tokens(vnorm)
+            for name, cs in by_name.items():
+                nt = _tokens(name)
+                if len(nt) >= 2 and nt <= vt or len(vt) >= 2 and vt <= nt:
+                    matches += cs
+        for a in g:
+            if not a.get("meeting_date"):
+                continue
+            prior = [c for c in matches if c.get("date") and timedelta(0) <= a["meeting_date"] - c["date"] <= timedelta(days=window)]
+            total = sum(c.get("amount") or 0 for c in prior)
+            if prior and total > min_contrib:
+                out.append(Flag(
+                    "pay_to_play", "high" if statutory else "medium",
+                    f"{_vendor_label(g)} (or its people) gave {_money(total)} within {window} days before a {_money(a.get('amount'))} award",
+                    ("Contributions above the statutory limit within a year before a non-fair-and-open contract can "
+                     "disqualify the vendor" if statutory else "Contributions from a vendor or its principals shortly "
+                     "before an award") + f"{ctx.cite('pay_to_play')}. Verify the contributor is the same person/entity, "
+                    "the recipients' roles, and whether a fair-and-open process was used.",
+                    _vendor_label(g), entity, a.get("amount"),
+                    [_ev(ctx, a)] + [{"title": f"{c.get('source')}: {c.get('contributor')} → {c.get('recipient')}",
+                                      "date": str(c.get("date")), "amount": c.get("amount"), "quote": c.get("employer") or ""}
+                                     for c in prior[:10]],
+                    score=3 + total / 1000, scope=f"{a.get('document_id')}:{a.get('item_no')}",
+                ))
+    return out
+
+
+_OVERSIGHT_PATTERNS = [
+    (r"significant fiscal stress", "high"), (r"\bfraud", "high"), (r"misappropriat", "high"), (r"\btheft\b", "high"),
+    (r"improper(?:ly)?\s+(?:paid|payments?|used)", "high"), (r"did not (?:comply|follow|obtain|seek|competitively)", "medium"),
+    (r"without (?:competitive|board|council) (?:bidding|approval)", "medium"), (r"unsupported", "medium"),
+    (r"overpa(?:id|yments?)", "medium"), (r"moderate fiscal stress", "medium"), (r"operating deficits?", "medium"),
+    (r"repeat(?:ed)? finding|prior[- ]year findings? (?:have|has) not been|not (?:been )?(?:fully )?implemented", "medium"),
+    (r"material weakness", "medium"), (r"(?:was|were) not (?:adequately )?(?:monitored|reconciled|supported|approved)", "medium"),
+]
+
+
+def oversight_findings(ctx: Ctx) -> list[Flag]:
+    out = []
+    for d in ctx.oversight_docs:
+        text = d.get("text") or ""
+        hits, sev = [], "low"
+        for pat, s in _OVERSIGHT_PATTERNS:
+            m = re.search(pat, text, re.I)
+            if m:
+                quote = " ".join(text[max(0, m.start() - 160):m.end() + 160].split())
+                page = None
+                for pm in re.finditer(r"^## Page (\d+)\s*$", text[:m.start()], re.M):
+                    page = int(pm.group(1))
+                hits.append({"document_id": str(d["document_id"]), "title": d.get("title"), "url": d.get("url"),
+                             "page": page, "quote": quote, "match": m.group(0)})
+                if SEV_RANK[s] > SEV_RANK[sev]:
+                    sev = s
+        if hits:
+            out.append(Flag(
+                "oversight_findings", sev,
+                f"Oversight report findings: {d.get('title') or 'audit'} ({', '.join(h['match'].lower() for h in hits[:4])})",
+                "An auditor or state oversight body reported adverse findings. Track whether management's "
+                "corrective action plan was implemented — repeat findings in later audits are the signal.",
+                d.get("title"), d.get("entity_key"), None, hits[:6], score=SEV_RANK[sev] + len(hits) / 10,
+            ))
+    return out
+
+
+def payments_over_threshold(ctx: Ctx) -> list[Flag]:
+    """Bill-list payments to one vendor in a fiscal year exceed the bid threshold,
+    but no competitively procured award to that vendor is on record."""
+    competitive = {(a.get("entity_key"), a.get("vendor_norm")) for a in ctx.awards
+                   if a.get("procurement") in COMPETITIVE and a.get("vendor_norm")}
+    by_year: dict[tuple, list[dict]] = defaultdict(list)
+    for a in ctx.awards:
+        if a.get("action_type") == "payment" and a.get("vendor_norm") and a.get("amount"):
+            by_year[(a.get("entity_key"), a["vendor_norm"], a.get("fiscal_year") or "unknown")].append(a)
+    out = []
+    for (entity, vnorm, fy), g in by_year.items():
+        total = sum(a["amount"] for a in g)
+        t = float((ctx.cfg("bid_threshold", default={}) or {}).get("purchase") or 35000)
+        if total >= t and (entity, vnorm) not in competitive:
+            out.append(Flag(
+                "payments_over_threshold", "high" if total >= 2 * t else "medium",
+                f"{_vendor_label(g)}: {_money(total)} paid in FY {fy} with no competitive award on record",
+                f"Purchases from one vendor are aggregated over the contract year for bidding purposes"
+                f"{ctx.cite('bid_threshold')}. Payments above the threshold need a bid, a state/cooperative contract, "
+                "or a documented exception. Innocent explanations: a contract awarded before the records indexed here, "
+                "a statutory exemption (utilities, other governments, insurance), or pass-through payments.",
+                _vendor_label(g), entity, total, [_ev(ctx, a) for a in g[:10]], score=total / t, scope=fy,
+            ))
+    return out
+
+
+RULES: dict[str, Callable[[Ctx], list[Flag]]] = {
+    "near_threshold": near_threshold,
+    "split_purchases": split_purchases,
+    "emergency_procurement": emergency_procurement,
+    "noncompetitive_concentration": noncompetitive_concentration,
+    "single_bid": single_bid,
+    "duplicate_award": duplicate_award,
+    "payouts": payouts,
+    "change_order_growth": change_order_growth,
+    "official_surname_hire": nepotism_surname,
+    "pay_to_play": pay_to_play,
+    "oversight_findings": oversight_findings,
+    "payments_over_threshold": payments_over_threshold,
+}
+
+
+def run_rules(ctx: Ctx, only: list[str] | None = None) -> list[Flag]:
+    disabled = set(ctx.cfg("disabled_rules", default=[]) or [])
+    flags: list[Flag] = []
+    for name, fn in RULES.items():
+        if (only and name not in only) or name in disabled:
+            continue
+        flags += fn(ctx)
+    seen, unique = set(), []
+    for f in sorted(flags, key=lambda f: (-SEV_RANK[f.severity], -f.score)):
+        if f.fingerprint not in seen:
+            seen.add(f.fingerprint)
+            unique.append(f)
+    return unique

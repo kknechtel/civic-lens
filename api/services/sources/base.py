@@ -39,7 +39,9 @@ class SourceAdapter:
         self.historical = True
         self.progress_callback: Optional[Callable[[int], None]] = None
         self.basic = BasicScraper()
-        self.basic.respect_robots = self.basic.respect_robots and source.respect_robots
+        # Deployment policy (crawl.respect_robots), overridable per source;
+        # RESPECT_ROBOTS_TXT=false in the environment turns it off everywhere.
+        self.basic.respect_robots = self.basic.respect_robots and municipality.respects_robots(source)
 
     # ── to override ───────────────────────────────────────────────────
     def discover(self) -> list[dict]:

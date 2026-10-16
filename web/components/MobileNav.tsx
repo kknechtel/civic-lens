@@ -10,6 +10,7 @@ import {
   EllipsisHorizontalIcon,
   PresentationChartLineIcon,
   DocumentTextIcon,
+  ShieldExclamationIcon,
   GlobeAltIcon,
   Cog6ToothIcon,
   ChatBubbleLeftRightIcon,
@@ -37,6 +38,7 @@ const mainTabs = [
 type MoreItem = { name: string; href: string; icon: typeof FolderIcon; adminOnly?: boolean };
 
 const moreItems: MoreItem[] = [
+  { name: "Integrity", href: "/integrity", icon: ShieldExclamationIcon },
   { name: "Financials", href: "/financial-analysis", icon: DocumentTextIcon },
   { name: "Presentations", href: "/presentations", icon: PresentationChartLineIcon },
   { name: "Scraper", href: "/scraper", icon: GlobeAltIcon, adminOnly: true },

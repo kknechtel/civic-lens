@@ -11,16 +11,17 @@ import {
   CalendarDaysIcon,
   ChevronLeftIcon, ChevronRightIcon, UserIcon,
   PresentationChartLineIcon,
-  MicrophoneIcon, BellIcon,
+  MicrophoneIcon, BellIcon, ShieldExclamationIcon,
 } from "@heroicons/react/24/outline";
 
 const defaultBrand = "#385854";
 
-type Feature = "financial" | "meetings" | "events" | "presentations" | "contracts" | "alerts";
+type Feature = "financial" | "meetings" | "events" | "presentations" | "contracts" | "alerts" | "integrity";
 
 export const navItems: { name: string; href: string; icon: any; feature?: Feature; children?: { name: string; href: string; icon: any }[] }[] = [
   { name: "Dashboard", href: "/", icon: ChartBarIcon },
   { name: "Documents", href: "/document-library", icon: FolderIcon },
+  { name: "Integrity", href: "/integrity", icon: ShieldExclamationIcon, feature: "integrity" },
   {
     name: "Financials",
     href: "/financial-analysis",

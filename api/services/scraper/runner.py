@@ -460,7 +460,7 @@ async def run_scraper(
             collapsed = re.sub(r"(\.[a-z0-9]{2,4})\1$", r"\1", fn.lower())
             existing_filenames.add(collapsed)
 
-        # Sites come from the municipality profile (municipalities/<slug>/municipality.yaml).
+        # Sites come from the deployment (jurisdictions/**/jurisdiction.yaml, incl. state/county templates).
         crawlers = site_table()
         muni = get_municipality()
         if sites:

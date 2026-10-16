@@ -1,0 +1,109 @@
+# New York — state rules, records law and source templates inherited by every NY town.
+# Templates run for each municipality that sets the variables they use (template_vars).
+name: State of New York
+short_name: New York
+level: state
+code: NY
+government_type: state
+ocd_id: ocd-division/country:us/state:ny
+crawl:
+  respect_robots: false
+entities:
+- key: ny
+  label: State of New York
+  short: NYS
+  kind: state
+  description: New York State agencies — Office of the State Comptroller (audits, fiscal stress), NYSED, DEC, MTA/LIRR
+  aliases:
+  - new york state
+  - office of the state comptroller
+  - osc
+  legacy_keys:
+  - state
+records_law:
+  name: Freedom of Information Law
+  short: FOIL
+  citation: N.Y. Public Officers Law §§ 84-90
+  acknowledge_business_days: 5
+  respond_business_days: 20
+  notes: Agency must respond within 5 business days (grant, deny, or acknowledge with an approximate date). If acknowledged,
+    it must grant or deny within 20 business days of the acknowledgment, absent a written explanation and a date
+    certain. Denials may be appealed within 30 days to the agency's records-access appeals officer, who has 10 business
+    days to decide. The Committee on Open Government issues advisory opinions.
+oversight:
+- NY Office of the State Comptroller (OSC) — local government audits, Fiscal Stress Monitoring System, Annual Financial
+  Reports (AUD)
+- NY State Education Department (NYSED) — school property tax report cards, ST-3 financial reports
+ai_notes:
+- NY local governments file an Annual Financial Report (AUD) with the State Comptroller; audited GAAP statements
+  are separate and can differ from the AUD.
+- The NY property tax cap (General Municipal Law §3-c) limits levy growth to the lesser of 2% or CPI (plus exclusions);
+  exceeding it requires a 60% governing-body override vote for cities, towns and villages.
+- School budgets go to a public vote each May; school tax-cap overrides need 60% voter approval.
+- The State Comptroller's Fiscal Stress Monitoring System scores municipalities as "significant", "moderate", "susceptible"
+  or "no designation" — cite the year when quoting a score.
+- Cities in NY are subject to a constitutional tax limit on the real property tax levy (percentage of five-year
+  average full valuation).
+glossary:
+  foil:
+  - freedom of information law
+  - records request
+  osc:
+  - office of the state comptroller
+  - state comptroller
+  aud:
+  - annual financial report
+  - annual update document
+  fsms:
+  - fiscal stress monitoring system
+  - fiscal stress
+  nysed:
+  - new york state education department
+  - state education department
+  boces:
+  - board of cooperative educational services
+  pilot:
+  - payment in lieu of taxes
+  ida:
+  - industrial development agency
+  mta:
+  - metropolitan transportation authority
+  lirr:
+  - long island rail road
+source_templates:
+- id: osc_audits
+  label: State Comptroller audits — {short_name}
+  adapter: html_index
+  entity_kind: municipal
+  doc_type: audit
+  description: OSC audits, budget reviews and fiscal stress reports naming this municipality (and its school district)
+  params:
+    start_urls:
+    - https://www.osc.ny.gov/local-government/audits?combine={osc_search}
+    follow_pattern: osc\.ny\.gov/local-government/audits/[^?]+/\d{4}/
+    max_depth: 1
+    max_pages: 60
+    title_from: row
+    link_pattern: osc\.ny\.gov/files/local-government/audits/.+{osc_slug}.*\.pdf
+# Thresholds and citations for the integrity rules (api/services/integrity/rules.py).
+integrity:
+  bid_threshold:
+    purchase: 35000
+    public_works: 20000
+    citation: NY General Municipal Law §103 — competitive bidding for purchase contracts over $35,000 and public works over $20,000
+  emergency:
+    citation: GML §103(4) emergency exception — requires an actual, unforeseen emergency affecting public buildings, property or safety
+  near_threshold_ratio: 0.85
+  split_window_days: 90
+  concentration_months: 24
+  concentration_min_awards: 3
+  payout_review_amount: 25000
+  change_order:
+    cap_pct: 20
+    citation: no statutory cap in NY; 20% is a common audit benchmark
+  pay_to_play:
+    statutory: false
+    window_days: 365
+    contribution_threshold: 0
+    contract_threshold: 0
+    citation: NY has no general municipal pay-to-play statute; check local ethics codes and NYC-style doing-business rules

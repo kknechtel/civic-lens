@@ -1,0 +1,29 @@
+# Neighbour of Atlantic Highlands; shares the Henry Hudson Regional School District.
+name: Borough of Highlands
+short_name: Highlands
+level: municipality
+government_type: borough
+entities:
+- key: highlands
+  label: Borough of Highlands
+  short: Highlands
+  kind: municipal
+  description: Borough of Highlands — a DIFFERENT neighboring town (Navesink Ave, "Borough of Highlands", Highlands
+    council)
+  aliases:
+  - highlands borough
+sources:
+- id: highlands_borough
+  description: Borough of Highlands — regionalization, council letters, public docs
+  label: highlandsnj.gov
+  adapter: legacy
+  entity: highlands
+  params:
+    class: HighlandsBoroughCrawler
+- id: highlands_meetings
+  description: Highlands Borough Council meeting agendas + packets
+  label: highlands-nj.municodemeetings.com
+  adapter: legacy
+  entity: highlands
+  params:
+    class: HighlandsMeetingsCrawler

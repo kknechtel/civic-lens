@@ -1,121 +1,143 @@
 # Civic Lens
 
-Open-source document intelligence for local government. Point it at a town's
-public websites and it collects agendas, minutes, budgets, audits, ordinances,
-RFPs and meeting videos, extracts the text (including scanned PDFs), and makes
-everything searchable, with an AI assistant that answers questions and cites
-the source documents.
+Open-source document intelligence and **integrity monitoring** for local
+government. Point it at a city, a county or a whole state. It collects the
+public record (agendas, minutes, resolutions, budgets, audits, contracts,
+RFPs, personnel reports, meeting video), extracts the text including scanned
+PDFs, makes everything searchable with an AI assistant that cites sources,
+and flags spending patterns that deserve a closer look.
 
-One deployment serves one municipality. Everything town-specific lives in a
-YAML **profile** under [`municipalities/`](municipalities/). To add a town you
-write a profile; you don't fork the code.
+The integrity flags cover:
 
-| Profile | Status |
+- bids parked just under the threshold, and split purchases;
+- emergency and no-bid concentration;
+- single bidders and duplicate awards;
+- separation payouts;
+- change-order creep;
+- officials' surnames on hiring reports;
+- pay-to-play matches;
+- adverse audit findings.
+
+Every flag cites the page it came from and goes through human review. See
+**[docs/INTEGRITY.md](docs/INTEGRITY.md)** for the approach and roadmap.
+
+## Jurisdictions: city, county, state
+
+Everything place-specific lives in YAML under [`jurisdictions/`](jurisdictions/):
+
+```
+jurisdictions/us/ny/jurisdiction.yaml                      State: records law (FOIL), accounting notes,
+                                                           bid thresholds, source templates (State Comptroller audits…)
+jurisdictions/us/ny/nassau/jurisdiction.yaml               County: Legislature agenda center
+jurisdictions/us/ny/nassau/long-beach/jurisdiction.yaml    City: entities (city, school district, library), sources
+jurisdictions/us/nj/…/monmouth/atlantic-highlands/          The original deployment (ahnj.info)
+```
+
+A deployment is rooted at any node (`DEPLOYMENT=us/ny/nassau/long-beach`,
+`us/ny/nassau`, or `us/ny`):
+
+- **Ancestors** contribute rules and their own government as an entity.
+- **Descendants** contribute their sources.
+- **State and county source templates** are stamped out for every town
+  beneath them.
+
+Adding a town is a YAML file; adding a state is a YAML file plus its laws.
+
+| Deployment | Status |
 |---|---|
-| [`atlantic-highlands-nj`](municipalities/atlantic-highlands-nj/municipality.yaml) | The original production deployment ([ahnj.info](https://ahnj.info)). Most sources use the hand-written "legacy" crawlers. |
-| [`long-beach-ny`](municipalities/long-beach-ny/municipality.yaml) | New. Its school district, library and State Comptroller sources are verified live. City sources are blocked by robots.txt until the city grants permission (see [the profile README](municipalities/long-beach-ny/README.md)). |
+| [`us/ny/nassau/long-beach`](jurisdictions/us/ny/nassau/long-beach/) | Test deployment. Indexes city council, finance, land-use and contract records, the school district, the library, and State Comptroller audits. Integrity rules run on the extracted spending actions. |
+| [`us/nj/monmouth/atlantic-highlands`](jurisdictions/us/nj/monmouth/atlantic-highlands/) | The original production app ([ahnj.info](https://ahnj.info)); includes neighbouring Highlands. |
+| `us/ny/nassau`, `us/ny`, `us/nj/monmouth`, `us/nj` | County- and state-wide roots over the towns configured so far. |
 
 ## What it does
 
-- **Collect.** Configurable source adapters crawl municipal CMS index pages
-  (`html_index`), XML sitemaps, RSS feeds, YouTube channels and eCode360. Every
-  crawl honours robots.txt and identifies itself with an honest User-Agent.
-- **Extract.** For PDFs it uses the text layer when there is one and runs
-  Tesseract OCR only on pages that need it, under hard memory, CPU and time
-  limits. It also reads DOCX, XLSX, legacy Office files and images.
+- **Collect.** Configurable adapters handle municipal CMS index pages
+  (`html_index`, with accordion and year-page support), sitemaps, RSS,
+  YouTube (Data API), eCode360, iCal, and hand-written crawlers for odd
+  sites. The crawl policy is set per deployment; the crawler always
+  identifies itself honestly and rate-limits itself.
+- **Extract.** For PDFs it uses the text layer, and Tesseract OCR only on
+  pages that need it, under hard memory, CPU and time limits. It also reads
+  DOCX, XLSX, legacy Office files and images.
+- **Integrity.** It extracts spending actions (vendor, amount, procurement
+  method, bids received, account code), personnel actions and roll calls,
+  imports campaign finance, runs 11 rules with state-specific thresholds,
+  and supports review.
 - **Understand** (optional, needs `GEMINI_API_KEY`). One low-cost model call
-  per document produces a title, summary, document type, the publishing
-  government, the document date and the fiscal year.
-- **Search.** Hybrid keyword and vector search over passage chunks (Postgres
-  `tsvector` plus pgvector), with query expansion driven by the profile's
-  glossary.
-- **Ask** (optional, needs `ANTHROPIC_API_KEY`). An agentic chat assistant that
-  searches, reads the documents and cites every claim. It knows the town's
-  fiscal calendar and its state's accounting and records-law rules.
+  per document produces a title, summary, type, publishing government, date
+  and fiscal year.
+- **Search and ask.** Hybrid keyword and vector search. The chat assistant
+  (`ANTHROPIC_API_KEY`) cites documents and can query red flags and the
+  spending ledger.
 - **More.** Meeting transcription and summaries, a calendar, email alerts,
-  financial statement extraction and analysis, and presentation decks.
+  financial statement analysis, and presentation decks.
 
-Without any API keys the app still collects, extracts, indexes and keyword-searches
-the documents.
+Without API keys it still collects, extracts, indexes, keyword-searches and
+runs every integrity rule.
 
 ## Quick start (Docker)
 
 ```bash
-cp .env.example .env          # set MUNICIPALITY and JWT_SECRET at minimum
+cp .env.example .env          # set DEPLOYMENT and JWT_SECRET at minimum
 docker compose up --build
 docker compose exec api python create_admin.py you@example.org
-docker compose exec api python -m scripts.scheduled_scrape     # first crawl + processing
-open http://localhost:3000
+docker compose exec api python -m scripts.scheduled_scrape     # crawl → process → integrity
+open http://localhost:3000    # Integrity tab lists the flags
 ```
 
 ## Local development
 
 ```bash
-# API (Python 3.12, Postgres 16 with pgvector, tesseract-ocr)
 cd api
 uv venv -p 3.12 && uv pip install -r requirements.txt pytest pyyaml
-export MUNICIPALITY=long-beach-ny JWT_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))") \
+export DEPLOYMENT=us/ny/nassau/long-beach JWT_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))") \
        DATABASE_URL=postgresql://postgres:postgres@localhost:5432/civiclens STORAGE_BACKEND=local
 uvicorn main:app --port 8002 --reload
-pytest tests
+pytest tests                                         # no network needed
+python -m scripts.check_profile --all                # validate every jurisdiction
+python -m scripts.check_profile long-beach-ny --live # dry-run each source
+python -m scripts.run_integrity --report             # flags, worst first
 
-# Web (Node 20+)
-cd web && npm ci && npm run dev    # proxies /api/* to http://localhost:8002
+cd ../web && npm ci && npm run dev                   # proxies /api/* to :8002
 ```
 
-## Adding a municipality
+## Adding a town, county or state
 
-See **[docs/ADDING_A_MUNICIPALITY.md](docs/ADDING_A_MUNICIPALITY.md)**. In short:
+See **[docs/ADDING_A_MUNICIPALITY.md](docs/ADDING_A_MUNICIPALITY.md)**.
 
-1. Copy a profile to `municipalities/<town>-<state>/municipality.yaml`.
-2. List the entities (town, school district, library, county, state) and the
-   sources.
-3. Run `python -m scripts.check_profile <slug> --live` until every source
-   finds what you expect.
-4. Do a sample run with `SCRAPER_MAX_DOCS_PER_SOURCE=10`, then a full run.
+## Crawling
 
-If the state isn't covered yet, add `municipalities/_states/<code>.yaml` with
-its public-records law, oversight agencies, and accounting notes for the AI.
-NJ and NY ship today.
+Civic Lens collects public records. Whether to obey robots.txt is a
+deployment decision (`crawl.respect_robots`), which can be overridden per
+source. The NJ and NY state files in this repo set it to `false`, so those
+deployments ignore robots.txt. Either way the crawler sends an honest
+User-Agent (`CivicLens/0.1 (+repo URL)`), waits between requests, retries
+with backoff, and trips a circuit breaker on failing hosts. See the
+guardrails section of [docs/INTEGRITY.md](docs/INTEGRITY.md).
 
-## Responsible collection
+## Operations
 
-Civic Lens only collects documents that are already public, and it follows
-the publisher's rules:
+- **OCR** renders and OCRs one page at a time. Pages are capped at
+  `OCR_MAX_PIXELS`, a process-wide semaphore limits concurrent Tesseract
+  runs, each page has a timeout, and oversized PDFs fall back to the text
+  layer. Run the batch jobs under the systemd units in
+  [`infra/systemd/`](infra/systemd/), which set `MemoryMax` and `CPUQuota`.
+- **Storage:** `STORAGE_BACKEND=local` keeps files on disk; `auto` uses S3
+  when it's available.
 
-- **robots.txt is enforced by default** (RFC 9309), including `Crawl-delay`.
-  A source can opt out only with a `permission_note` that records who granted
-  permission and when. Without that note the profile fails validation.
-- It sends an honest User-Agent (`CivicLens/0.1 (+repo URL)`) so site
-  operators can identify the crawler and contact the deployer.
-- Crawls are polite: they run one at a time per host with backoff, and a
-  circuit breaker stops requests to a host that keeps failing.
-- For YouTube it uses the official Data API rather than the robots-disallowed
-  RSS feed.
-
-## Operations notes
-
-- **OCR is the heavy step.** Each page is rendered and OCR'd separately and
-  capped at `OCR_MAX_PIXELS`. A process-wide semaphore limits concurrent
-  Tesseract runs, each page has a timeout, and oversized PDFs fall back to the
-  text layer. On a single box, run the scraper and transcription under the
-  systemd units in [`infra/systemd/`](infra/systemd/). They set `MemoryMax` and
-  `CPUQuota` so a large batch can't take the API down.
-- **Storage.** `STORAGE_BACKEND=local` keeps files on disk; `auto` uses S3 when
-  credentials and a bucket are available.
-
-## Project layout
+## Layout
 
 ```
 api/                FastAPI app, scrapers, OCR/extraction, enrichment, search, chat
-  municipality.py   profile schema + loader (the one place towns are defined)
-  services/sources/ generic source adapters + registry
-  scripts/          scheduled scrape, digests, check_profile, backfills
-  tests/            pytest suite (no network)
-web/                Next.js client; reads the profile from GET /api/municipality
-municipalities/     one folder per town + _states/ packs
-infra/              systemd units, OCR Lambda
+  municipality.py   jurisdiction tree loader → deployment view
+  services/sources/ generic source adapters
+  services/integrity/ fact extraction + red-flag rules + runner
+  scripts/          scheduled_scrape, run_integrity, check_profile, digests, backfills
+  tests/            pytest (fixtures are real public records)
+web/                Next.js client (reads the deployment from GET /api/municipality)
+jurisdictions/      us/<state>/<county>/<place>/jurisdiction.yaml
 docs/               guides
+infra/              systemd units, OCR Lambda
 ```
 
 ## License

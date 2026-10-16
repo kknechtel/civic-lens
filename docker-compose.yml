@@ -1,5 +1,5 @@
 # Local / single-box deployment.
-#   cp .env.example .env    # set MUNICIPALITY, JWT_SECRET, optional API keys
+#   cp .env.example .env    # set DEPLOYMENT, JWT_SECRET, optional API keys
 #   docker compose up --build
 #   docker compose exec api python create_admin.py you@example.org
 #   docker compose exec api python -m scripts.scheduled_scrape   # first crawl
@@ -32,7 +32,7 @@ services:
     volumes:
       - documents:/data/documents
       # Edit profiles without rebuilding: restart the api after changes.
-      - ./municipalities:/municipalities:ro
+      - ./jurisdictions:/jurisdictions:ro
     ports:
       - "8000:8000"
     depends_on:

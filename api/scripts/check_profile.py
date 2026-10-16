@@ -1,9 +1,10 @@
 """
 Validate a municipality profile and (optionally) dry-run its sources.
 
-    python -m scripts.check_profile long-beach-ny            # schema + references only
-    python -m scripts.check_profile long-beach-ny --live     # also fetch index pages (no downloads)
-    python -m scripts.check_profile long-beach-ny --live --only lbcsd_board osc_audits
+    python -m scripts.check_profile us/ny/nassau/long-beach          # schema + references only
+    python -m scripts.check_profile long-beach-ny --live             # aliases work too
+    python -m scripts.check_profile us/ny/nassau --live --only legislature
+    python -m scripts.check_profile --all                            # every jurisdiction as a deployment
 
 --live reports, per source: documents discovered, doc_type mix, robots.txt
 blocks, and three sample titles — the fastest way to tune a new profile.
@@ -21,26 +22,43 @@ import time
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("slug")
+    ap.add_argument("slug", nargs="?", help="jurisdiction path or alias")
+    ap.add_argument("--all", action="store_true", help="validate every jurisdiction as a deployment root")
     ap.add_argument("--live", action="store_true", help="fetch index pages and list what each source would ingest")
     ap.add_argument("--only", nargs="*", default=None, help="source ids to check")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.WARNING, format="  %(levelname)s %(name)s: %(message)s")
-    os.environ["MUNICIPALITY"] = args.slug
-    from municipality import load_municipality
+    from municipality import JURISDICTIONS_DIR, _all_paths, load_deployment
     from services.sources import build_adapter
 
+    if args.all:
+        bad = 0
+        for path in _all_paths(JURISDICTIONS_DIR):
+            try:
+                m = load_deployment(path)
+                print(f"✓ {path:40s} {m.level:12s} {len(m.entities):3d} entities {len(m.sources):4d} sources")
+            except Exception as e:
+                bad += 1
+                print(f"✗ {path}: {e}")
+        return 1 if bad else 0
+    if not args.slug:
+        ap.error("give a jurisdiction path/alias or --all")
+
+    os.environ["DEPLOYMENT"] = args.slug
     try:
-        muni = load_municipality(args.slug)
+        muni = load_deployment(args.slug)
     except Exception as e:  # validation errors are the point of this tool
         print(f"✗ {args.slug}: {e}")
         return 1
 
-    print(f"✓ {muni.name}, {muni.state} — {len(muni.entities)} entities, {len(muni.sources)} sources, "
+    print(f"✓ {muni.name} [{muni.slug}, {muni.level}] — {len(muni.entities)} entities, {len(muni.sources)} sources, "
           f"{len(muni.events.venues)} event venues")
-    print(f"  records law: {muni.state_profile.records_law.short if muni.state_profile else '— (no _states file)'}"
-          f" · fiscal year starts month {muni.fiscal_year.start_month}")
+    print(f"  records law: {muni.state_profile.records_law.short if muni.state_profile else '—'}"
+          f" · fiscal year starts month {muni.fiscal_year.start_month}"
+          f" · robots.txt: {'respected' if muni.crawl.respect_robots else 'ignored'}")
+    for s in muni.skipped_templates:
+        print(f"  · template skipped: {s}")
     if not args.live:
         return 0
 

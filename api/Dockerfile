@@ -1,4 +1,4 @@
-# Build from the repo root so municipality profiles are baked in:
+# Build from the repo root so jurisdiction profiles are baked in:
 #   docker build -f api/Dockerfile .
 FROM python:3.12-slim
 
@@ -14,8 +14,8 @@ COPY api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api/ .
-COPY municipalities/ /municipalities/
-ENV MUNICIPALITIES_DIR=/municipalities \
+COPY jurisdictions/ /jurisdictions/
+ENV JURISDICTIONS_DIR=/jurisdictions \
     OMP_THREAD_LIMIT=1
 
 EXPOSE 8000

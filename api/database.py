@@ -261,6 +261,21 @@ def _migrate():
             except Exception as e:
                 logger.warning(f"municipality seed skipped: {e}")
 
+        # 1c. Entity keys renamed in the jurisdiction tree (e.g. "state" → "ny"):
+        # move rows stored under an entity's legacy_keys to its current key.
+        if _table_exists("documents"):
+            try:
+                from municipality import get_municipality
+                for e in get_municipality().entities:
+                    for old in e.legacy_keys:
+                        with conn.begin_nested():
+                            n = conn.execute(text("UPDATE documents SET municipality = :new WHERE municipality = :old"),
+                                             {"new": e.key, "old": old}).rowcount
+                        if n:
+                            logger.info(f"Migrated {n} documents municipality {old!r} → {e.key!r}")
+            except Exception as e:
+                logger.warning(f"entity key migration skipped: {e}")
+
         # 2. Enable pgvector + tsvector for hybrid RAG
         try:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))

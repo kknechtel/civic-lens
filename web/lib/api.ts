@@ -1465,3 +1465,98 @@ export async function deleteAlert(id: string): Promise<void> {
     throw new Error(err.detail || `Delete failed: ${res.status}`);
   }
 }
+
+// ─── Integrity (red flags) ───────────────────────────────────────────
+
+export type FlagSeverity = "low" | "medium" | "high";
+export type FlagStatus = "open" | "reviewing" | "dismissed" | "confirmed";
+
+export interface FlagEvidence {
+  document_id?: string;
+  title?: string | null;
+  url?: string | null;
+  page?: number | null;
+  date?: string;
+  quote?: string | null;
+  amount?: number | null;
+  item?: string | null;
+}
+
+export interface IntegrityFlag {
+  id: string;
+  rule: string;
+  severity: FlagSeverity;
+  score: number;
+  title: string;
+  explanation: string | null;
+  entity_key: string | null;
+  subject: string | null;
+  amount: number | null;
+  evidence: FlagEvidence[];
+  status: FlagStatus;
+  reviewer_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  first_seen: string | null;
+}
+
+export interface IntegritySummary {
+  open_by_severity: Partial<Record<FlagSeverity, number>>;
+  by_rule: Record<string, number>;
+  by_status: Partial<Record<FlagStatus, number>>;
+  awards: number;
+  award_total: number;
+}
+
+export interface IntegrityVendor {
+  vendor_norm: string;
+  vendor: string;
+  awards: number;
+  total: number;
+  noncompetitive_total: number;
+  noncompetitive_share: number | null;
+  first: string | null;
+  last: string | null;
+  flags: number;
+}
+
+export interface IntegrityAward {
+  id: string;
+  document_id: string;
+  meeting_date: string | null;
+  item_no: string | null;
+  page: number | null;
+  title: string | null;
+  vendor_name: string | null;
+  amount: number | null;
+  action_type: string;
+  procurement: string;
+  bids_received: number | null;
+  account_code: string | null;
+  quote: string | null;
+}
+
+export function getIntegritySummary(): Promise<IntegritySummary> {
+  return request<IntegritySummary>("/api/integrity/summary");
+}
+
+export function getIntegrityFlags(params: { rule?: string; severity?: string; status?: string; subject?: string } = {}): Promise<IntegrityFlag[]> {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+  return request<IntegrityFlag[]>(`/api/integrity/flags${qs ? `?${qs}` : ""}`);
+}
+
+export function reviewIntegrityFlag(id: string, status: FlagStatus, reviewer_note?: string): Promise<IntegrityFlag> {
+  return request<IntegrityFlag>(`/api/integrity/flags/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status, reviewer_note }),
+  });
+}
+
+export function getIntegrityVendors(): Promise<IntegrityVendor[]> {
+  return request<IntegrityVendor[]>("/api/integrity/vendors");
+}
+
+export function getIntegrityAwards(params: { vendor?: string; procurement?: string; action?: string } = {}): Promise<IntegrityAward[]> {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+  return request<IntegrityAward[]>(`/api/integrity/awards${qs ? `?${qs}` : ""}`);
+}

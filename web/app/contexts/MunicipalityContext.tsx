@@ -31,7 +31,7 @@ export interface Municipality {
     app_name: string; tagline: string; theme_color: string; public_origin: string; contact_email: string;
     banner_url?: string; banner_alt?: string;
   };
-  features: { financial: boolean; meetings: boolean; events: boolean; presentations: boolean; contracts: boolean; alerts: boolean };
+  features: { financial: boolean; meetings: boolean; events: boolean; presentations: boolean; contracts: boolean; alerts: boolean; integrity: boolean };
   entities: MunicipalityEntity[];
   records_law: { name: string; short: string; citation: string } | null;
 }
@@ -54,7 +54,7 @@ export const FALLBACK_MUNICIPALITY: Municipality = {
     public_origin: "",
     contact_email: "",
   },
-  features: { financial: true, meetings: true, events: true, presentations: true, contracts: true, alerts: true },
+  features: { financial: true, meetings: true, events: true, presentations: true, contracts: true, alerts: true, integrity: true },
   entities: [],
   records_law: null,
 };

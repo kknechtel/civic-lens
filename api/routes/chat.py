@@ -138,7 +138,7 @@ For every non-trivial question:
    - For ANALYSIS (revenue composition, expenditure breakdown, fund-balance health, debt position, red flags), call `get_drill_results` for the relevant statement_id. The drill is far richer than the summary — use it.
    - For SPECIFIC line items ("show me transportation costs", "salaries vs benefits"), call `get_line_items` with section/fund/function_code/object_code filters.
    - To surface FINANCIAL CONCERNS proactively, call `get_anomalies` — pre-computed rule-based flags.
-4. For VENDOR / CONTRACT questions, call `search_contracts` and/or `get_vendor_summary`.
+4. For VENDOR / CONTRACT questions, call `search_awards` (resolution-level spending with procurement method) and/or `search_contracts` / `get_vendor_summary`. For "anything suspicious / red flags / who gets no-bid work", call `get_integrity_flags`, then read the evidence documents. Present flags as leads with innocent explanations — never as proof of corruption — and cite the evidence.
 5. MEETING RECORDINGS — `search_chunks` already covers them. They show up with a `doc_type` starting with `recording_` (e.g. `recording_council`, `recording_school_board`). Each chunk's text is prefixed with `[HH:MM:SS]` markers from the transcript. When citing a moment from a meeting, INCLUDE the timestamp in your answer (e.g. "At [01:23:45] the council voted 5-0…"). The frontend turns these into seek-to links on the meeting page. Use `read_document` to scroll the full transcript when you need broader context than the chunks give.
 6. JURISDICTION-SPECIFIC AWARENESS:
 {jurisdiction_notes}
@@ -366,6 +366,33 @@ def _tool_defs() -> list[dict]:
                     "entity_type": {"type": "string", "enum": ["town", "school"]},
                 },
                 "required": ["vendor_name"],
+            },
+        },
+        {
+            "name": "get_integrity_flags",
+            "description": "Red flags the integrity engine raised from the records — near-threshold and split purchases, emergency and no-bid concentration, single bids, duplicate awards, payouts, change-order growth, official-surname hires, pay-to-play matches, and adverse oversight/audit findings. Each flag has evidence (document, page, quote). Use for 'anything suspicious?', 'who gets no-bid work?', 'red flags for vendor X'. Flags are leads for review, not findings — say so, and cite the evidence documents.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "rule": {"type": "string", "description": "e.g. split_purchases, emergency_procurement, noncompetitive_concentration, pay_to_play, oversight_findings"},
+                    "subject": {"type": "string", "description": "vendor or person name (substring)"},
+                    "min_severity": {"type": "string", "enum": ["low", "medium", "high"], "default": "medium"},
+                    "limit": {"type": "integer", "default": 15, "maximum": 50},
+                },
+            },
+        },
+        {
+            "name": "search_awards",
+            "description": "Spending actions extracted from council/board resolutions: vendor, amount, date, procurement method (competitive_bid, rfp, state_contract, emergency, professional_services, no_bid, sole_source, unknown), bids received, account code, with the source document. Use for vendor histories and 'how was X procured?'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "vendor": {"type": "string"},
+                    "procurement": {"type": "string"},
+                    "action_type": {"type": "string", "description": "contract, purchase, payout, transfer, settlement, change_order, grant, lease"},
+                    "min_amount": {"type": "number"},
+                    "limit": {"type": "integer", "default": 25, "maximum": 100},
+                },
             },
         },
     ]
@@ -742,6 +769,43 @@ def _exec_web_search(args: dict) -> dict:
     }
 
 
+def _exec_get_integrity_flags(db: Session, args: dict) -> dict:
+    from models.integrity import IntegrityFlag
+    sev = {"low": ["low", "medium", "high"], "medium": ["medium", "high"], "high": ["high"]}[args.get("min_severity") or "medium"]
+    q = db.query(IntegrityFlag).filter(IntegrityFlag.active == 1, IntegrityFlag.status != "dismissed",
+                                       IntegrityFlag.severity.in_(sev))
+    if args.get("rule"):
+        q = q.filter(IntegrityFlag.rule == args["rule"])
+    if args.get("subject"):
+        q = q.filter(IntegrityFlag.subject.ilike(f"%{args['subject']}%"))
+    rank = {"high": 0, "medium": 1, "low": 2}
+    rows = sorted(q.all(), key=lambda f: (rank.get(f.severity, 3), -(f.score or 0)))[: min(int(args.get("limit") or 15), 50)]
+    return {"count": len(rows), "note": "Red flags are leads for human review, not findings of wrongdoing.",
+            "flags": [{"rule": f.rule, "severity": f.severity, "status": f.status, "title": f.title,
+                       "explanation": f.explanation, "subject": f.subject, "amount": f.amount,
+                       "evidence": [{k: e.get(k) for k in ("title", "page", "date", "quote", "amount")}
+                                    for e in (f.evidence or [])[:4]]} for f in rows]}
+
+
+def _exec_search_awards(db: Session, args: dict) -> dict:
+    from models.document import Document
+    from models.integrity import Award
+    q = db.query(Award, Document.filename).join(Document, Document.id == Award.document_id)
+    if args.get("vendor"):
+        q = q.filter(Award.vendor_name.ilike(f"%{args['vendor']}%"))
+    if args.get("procurement"):
+        q = q.filter(Award.procurement == args["procurement"])
+    if args.get("action_type"):
+        q = q.filter(Award.action_type == args["action_type"])
+    if args.get("min_amount"):
+        q = q.filter(Award.amount >= float(args["min_amount"]))
+    rows = q.order_by(Award.meeting_date.desc().nullslast()).limit(min(int(args.get("limit") or 25), 100)).all()
+    return {"count": len(rows), "awards": [
+        {"date": str(a.meeting_date or ""), "vendor": a.vendor_name, "amount": a.amount, "action": a.action_type,
+         "procurement": a.procurement, "bids_received": a.bids_received, "title": a.title, "account": a.account_code,
+         "filename": fn, "page": a.page, "quote": (a.quote or "")[:300]} for a, fn in rows]}
+
+
 def _execute_tool(name: str, args: dict, db: Session) -> dict:
     try:
         if name == "share_plan":
@@ -776,6 +840,10 @@ def _execute_tool(name: str, args: dict, db: Session) -> dict:
             return _exec_get_vendor_summary(db, args)
         if name == "web_search":
             return _exec_web_search(args)
+        if name == "get_integrity_flags":
+            return _exec_get_integrity_flags(db, args)
+        if name == "search_awards":
+            return _exec_search_awards(db, args)
         return {"error": f"unknown_tool:{name}"}
     except Exception as exc:
         logger.exception("Tool %s failed", name)
@@ -1034,6 +1102,10 @@ def _describe_tool_call(name: str, input_args: dict) -> str:
         return f"Searching contracts{(' / ' + ent) if ent else ''}{(' / ' + v) if v else ''}"
     if name == "get_vendor_summary":
         return f"Loading vendor: {args.get('vendor_name', '?')}"
+    if name == "get_integrity_flags":
+        return f"Checking red flags{(' — ' + args['subject']) if args.get('subject') else ''}"
+    if name == "search_awards":
+        return f"Searching awards{(' — ' + args['vendor']) if args.get('vendor') else ''}"
     return name.replace("_", " ").title()
 
 
@@ -1477,6 +1549,10 @@ def _summarize_tool_result(name: str, res: dict) -> str:
     if name == "get_vendor_summary":
         v = res.get("vendor") or {}
         return f"Loaded vendor: {v.get('name', '?')}"
+    if name == "get_integrity_flags":
+        return f"Found {res.get('count', 0)} red flag(s)"
+    if name == "search_awards":
+        return f"Found {res.get('count', 0)} award(s)"
     if name == "web_search":
         return f"Found {res.get('count', 0)} web results"
     return "ok"

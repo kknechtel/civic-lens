@@ -10,7 +10,7 @@ from services.sources.feeds import RssAdapter, SitemapAdapter, YouTubeChannelAda
 from services.sources.html_index import HtmlIndexAdapter, clean_title
 from services.sources.registry import build_adapter, site_table
 
-MUNI = load_municipality("long-beach-ny")
+MUNI = load_municipality("us/ny/nassau/long-beach")
 
 
 def _adapter(cls, params, **src):
@@ -126,6 +126,7 @@ def test_youtube_without_key_reports_robots_block(monkeypatch):
     monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
     src = Source(id="yt", adapter="youtube_channel", entity="long_beach", params={"channel_id": "UCxyz"})
     a = YouTubeChannelAdapter(src, MUNI)
+    a.basic.respect_robots = True  # a deployment that honours robots.txt
     a._get = lambda url: None  # robots.txt said no
     assert a.find_documents() == []
     assert any("YOUTUBE_API_KEY" in e for e in a.basic.errors)

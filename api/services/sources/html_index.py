@@ -53,7 +53,7 @@ _GENERIC_TITLE = re.compile(
     r"full report|document|file|agenda|minutes)\W*(\(?pdf\)?)?\W*$", re.I)
 _TITLE_NOISE = [
     re.compile(r"^\s*\.?(pdf|docx?|xlsx?|pptx?)\b\s*", re.I),             # file-type icon text
-    re.compile(r"\s*\(?opens? in a new (window|tab)\)?\s*", re.I),        # a11y suffixes
+    re.compile(r"\s*,?\s*\(?opens? (?:in a new (?:window|tab)|(?:a )?(?:pdf|word|excel) (?:document|file))\)?\s*", re.I),  # a11y suffixes
     re.compile(r"\s*[\[(]\s*(pdf|docx?)\s*(,?\s*[\d.]+\s*[kmg]b)?\s*[\])]\s*", re.I),
 ]
 

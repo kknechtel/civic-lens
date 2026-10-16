@@ -1,0 +1,430 @@
+"""
+Pull integrity facts out of a document's text — deterministically, no LLM.
+
+  awards     resolutions that spend money: vendor, amount, procurement method,
+             bids received, account code (WHEREAS… RESOLVED… blocks)
+  personnel  hires / promotions / separations from personnel reports
+  officials  roll call ("Present: Council President Finn and Council Members …")
+
+The parsers are tuned on Long Beach NY council packets and NJ borough
+resolutions but only rely on conventions common to US municipal records.
+Everything extracted carries the page and a short quote as evidence.
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from typing import Iterable
+
+_PAGE_RE = re.compile(r"^## Page (\d+)\s*$", re.M)
+_MONEY_RE = re.compile(r"\$\s?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})?)(?!\d)")
+_MONTHS = "january|february|march|april|may|june|july|august|september|october|november|december"
+_LONG_DATE_RE = re.compile(rf"\b({_MONTHS})\s+(\d{{1,2}}),\s*(20\d{{2}}|19\d{{2}})\b", re.I)
+_NUM_DATE_RE = re.compile(r"\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2}|\d{2})\b")
+
+# Item boundaries inside agenda packets / minutes.
+_ITEM_RE = re.compile(
+    r"(?im)^[ \t]*(?:item\s+no\.?\s*(?P<a>\d+[a-z]?)\b|resolution\s+(?:no\.?|number|#)\s*(?P<b>[\w\-/]*\d[\w\-/]*)?)"
+)
+_RESOLVED_RE = re.compile(r"\b(?:be it\s+)?resolved\b", re.I)
+
+_ENTITY_SUFFIX = (r"(?:Inc\.?|Incorporated|L\.?L\.?C\.?|L\.?L\.?P\.?|Corp\.?|Corporation|Company|Co\.|P\.?C\.?|"
+                  r"P\.?A\.?|Ltd\.?|Associates|Group|Solutions|Services|Engineers?|Engineering|Construction|"
+                  r"Contracting|Contractors?|Consultants?|Consulting|Partners|Enterprises|Agency|Architects?)")
+_VENDOR_RE = re.compile(
+    rf"(?:\bwith|\bto|\bfrom|\bretain|\bengage|\baward(?:ed)?\s+to|\bfirm\s+of)\s+(?:the\s+(?:firm|company)\s+of\s+)?"
+    rf"(?P<v>[A-Z0-9][\w&.,'’\-/ ]{{1,90}}?\b{_ENTITY_SUFFIX})(?=[\s,.;:)]|$)"
+)
+# "… from ICC Community Development Solutions, P.O. Box 772511, Detroit MI 48277" / "… X, 123 Main St, Town, NY 11701"
+_VENDOR_ADDR_RE = re.compile(
+    r"(?:\bwith|\bto|\bfrom|\bretain|\bpay|\bWHEREAS,)\s+(?:the\s+firm\s+of\s+)?"
+    r"(?P<v>[A-Z][\w&.'’\- ]{2,80}?(?:,\s*(?:Inc|LLC|L\.L\.C|LLP|Corp|P\.C|Ltd)\.?)?),\s*(?P<a>(?:P\.?\s?O\.?\s+Box\s+\d+|\d{1,6}\s+[A-Z][\w.' ]{2,40})"
+    r"[^$]{0,80}?\b(?:[A-Z]{2}|New York|New Jersey)\.?\s+\d{5}(?:-\d{4})?)"
+)
+_BIDS_RE = re.compile(
+    r"\b(?P<w>one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)\s*(?:\((?P<n>\d+)\))?\s*"
+    r"(?:sealed\s+|responsive\s+)?(?P<kind>bids?|proposals?|quotes?|quotations?|responses?)\s+(?:were|was)\s+received",
+    re.I,
+)
+_WORDNUM = {w: i for i, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve".split())}
+_ACCOUNT_RE = re.compile(
+    r"\b(?:Account|Acct\.?|Budget\s+Code|Line)\s*(?:No\.?|Number|#)?\s*:?\s*(?P<c>[A-Z]{0,2}\d[\w.\-]{3,24})"
+    r"|\b(?P<c2>[A-Z]{1,2}\d{4}\.\d{3,5})\b"  # NY uniform system of accounts (A1680.54445)
+    r"|\b(?P<c3>\d-\d{2}-\d{2}-\d{3}-\d{3})\b"  # NJ municipal account format
+)
+
+_PROCUREMENT = [  # first match wins
+    ("emergency", re.compile(r"\bemergenc(?:y|ies)\b(?!\s+(?:Services|Management|Medical|Operations|Response|Communications|Preparedness|Planning))|N\.?J\.?S\.?A\.?\s*40A:11-6\b|General Municipal Law\s*§?\s*103\s*\(4\)", re.I)),
+    ("sole_source", re.compile(r"\bsole[\s-]source\b|\bsingle[\s-]source\b|\bproprietary\b", re.I)),
+    ("no_bid", re.compile(r"non-?\s*fair\s+and\s+open|without\s+(?:public\s+|competitive\s+)?bid|\bno[\s-]bid\b|"
+                          r"exempt(?:ion)?\s+from\s+(?:public\s+|competitive\s+)?bidding|extraordinary,?\s+unspecifiable", re.I)),
+    ("state_contract", re.compile(r"\bstate\s+contract\b|\bOGS\b|\bNYS\s+contract|\bcounty\s+contract\b|piggy-?back|"
+                                  r"cooperative\s+(?:purchas|pricing|contract)|Sourcewell|BuyBoard|\bGSA\b|"
+                                  r"\bN\.?J\.?\s*START\b|Educational\s+Services\s+Commission", re.I)),
+    ("competitive_bid", re.compile(r"lowest\s+(?:responsible\s+|responsive\s+)*bidder|sealed\s+bids|bids?\s+(?:were|was)\s+received|"
+                                   r"public(?:ly)?\s+(?:bid|advertised)|fair\s+and\s+open\s+process", re.I)),
+    ("rfp", re.compile(r"request\s+for\s+proposals?|\bRFP\b|\bRFQ\b|proposals?\s+(?:were|was)\s+received|competitive\s+contracting", re.I)),
+    ("professional_services", re.compile(r"professional\s+services?", re.I)),
+]
+
+_ACTION = [  # first match wins
+    ("payout", re.compile(r"separation\s+pay|termination\s+pay|terminal\s+leave|pay[\s-]?outs?\b|accrued\s+(?:vacation|sick|leave)|"
+                          r"unused\s+(?:sick|vacation)|retirement\s+incentive|severance", re.I)),
+    ("settlement", re.compile(r"\bsettle(?:ment|d)?\b|\bjudgment\b|\bstipulation\b", re.I)),
+    ("change_order", re.compile(r"change\s+order|contract\s+amendment|increase\s+the\s+(?:contract|purchase\s+order)", re.I)),
+    ("transfer", re.compile(r"transfer\s+of\s+funds|budget\s+(?:amendment|transfer)|appropriation\s+transfer", re.I)),
+    ("grant", re.compile(r"\bgrant\b|accept\s+(?:funds|funding)|reimbursement\s+from", re.I)),
+    ("lease", re.compile(r"\blease\b|license\s+agreement|concession", re.I)),
+    ("purchase", re.compile(r"\bpurchase\b|\bacquire\b|\bprocure\b", re.I)),
+    ("contract", re.compile(r"\bcontract\b|\bagreement\b|\bretain\b|\bservices\b|\brepairs?\b|\bconstruction\b|"
+                           r"\bdesign\b|\bmaintenance\b|\binstall", re.I)),
+]
+
+_TITLE_RE = re.compile(r"(Resolution\s+(?:Authorizing|Approving|for|Awarding|Accepting|Setting|Amending|to|Ratifying)\b[^\n]{3,200}"
+                       r"(?:\n(?!\s*(?:WHEREAS|NOW|RESOLVED))[^\n]{3,160})?)", re.I)
+
+_SUFFIX_NORM = re.compile(r"\b(the|inc|incorporated|llc|l l c|llp|corp|corporation|company|co|pc|p c|pa|ltd|limited|dba|d b a)\b")
+
+
+def norm_name(name: str | None) -> str:
+    """Comparable vendor/person name: 'ICC Community Development Solutions, Inc.' → 'icc community development solutions'."""
+    if not name:
+        return ""
+    s = name.lower().replace("&", " and ")
+    s = re.sub(r"[^\w\s]", " ", s)
+    s = _SUFFIX_NORM.sub(" ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def parse_money(s: str) -> float:
+    return float(s.replace(",", ""))
+
+
+def _page_at(text: str, pos: int) -> int | None:
+    page = None
+    for m in _PAGE_RE.finditer(text, 0, pos + 1):
+        page = int(m.group(1))
+    return page
+
+
+def find_date(text: str) -> date | None:
+    m = _LONG_DATE_RE.search(text or "")
+    if m:
+        try:
+            return datetime.strptime(f"{m.group(1)} {m.group(2)} {m.group(3)}", "%B %d %Y").date()
+        except ValueError:
+            pass
+    m = _NUM_DATE_RE.search(text or "")
+    if m:
+        mo, d, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        y = y + 2000 if y < 100 else y
+        try:
+            return date(y, mo, d)
+        except ValueError:
+            return None
+    return None
+
+
+def _quote(seg: str, anchor: re.Match | None, width: int = 320) -> str:
+    if not anchor:
+        return " ".join(seg[:width].split())
+    start = max(0, anchor.start() - width // 2)
+    return " ".join(seg[start:start + width].split())
+
+
+@dataclass
+class AwardFact:
+    item_no: str | None
+    page: int | None
+    title: str
+    vendor_name: str | None
+    vendor_address: str | None
+    amount: float | None
+    action_type: str
+    procurement: str
+    bids_received: int | None
+    account_code: str | None
+    meeting_date: date | None
+    quote: str
+
+
+@dataclass
+class PersonnelFact:
+    last_name: str
+    first_name: str
+    department: str
+    action: str
+    position: str
+    salary: str
+    effective: str
+    page: int | None
+    quote: str
+
+
+@dataclass
+class OfficialFact:
+    name: str
+    last_name: str
+    role: str
+
+
+@dataclass
+class Facts:
+    awards: list[AwardFact] = field(default_factory=list)
+    personnel: list[PersonnelFact] = field(default_factory=list)
+    officials: list[OfficialFact] = field(default_factory=list)
+
+
+def split_items(text: str) -> list[tuple[str | None, int, str]]:
+    """[(item_no, start_offset, segment)] for every block that contains a RESOLVED clause."""
+    # A bare "Resolution No." (number left blank on the agenda) isn't a boundary.
+    marks = [m for m in _ITEM_RE.finditer(text) if m.group("a") or m.group("b")]
+    segs: list[tuple[str | None, int, str]] = []
+    if marks:
+        for i, m in enumerate(marks):
+            end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+            seg = text[m.start():end]
+            if _RESOLVED_RE.search(seg):
+                segs.append((m.group("a") or m.group("b"), m.start(), seg))
+    if not segs:
+        # No numbered items: treat each WHEREAS…RESOLVED run as one resolution.
+        for m in re.finditer(r"(?is)(WHEREAS\b.*?RESOLVED\b.*?)(?=\bWHEREAS\b(?!.*RESOLVED.*\bWHEREAS)|\Z)", text):
+            segs.append((None, m.start(), m.group(1)))
+    return segs
+
+
+def _classify(patterns, text: str, default: str) -> tuple[str, re.Match | None]:
+    for label, rx in patterns:
+        m = rx.search(text)
+        if m:
+            return label, m
+    return default, None
+
+
+def extract_awards(text: str, fallback_date: date | None = None) -> list[AwardFact]:
+    out: list[AwardFact] = []
+    for item_no, start, raw in split_items(text):
+        # Collapse whitespace so names/addresses wrapped across lines still match.
+        seg = " ".join(_PAGE_RE.sub(" ", raw).split())
+        resolved = _RESOLVED_RE.search(seg)
+        body = seg[resolved.start():] if resolved else seg
+        amounts = [parse_money(m.group(1)) for m in _MONEY_RE.finditer(body)] or \
+                  [parse_money(m.group(1)) for m in _MONEY_RE.finditer(seg)]
+        amounts = [a for a in amounts if a >= 1]
+        title_m = _TITLE_RE.search(raw)
+        title = " ".join(title_m.group(1).split())[:240] if title_m else " ".join(seg[:160].split())
+        action, _ = _classify(_ACTION, title + " " + seg[:1500], "other")
+        procurement, proc_m = _classify(_PROCUREMENT, seg, "unknown")
+        if not amounts and action not in ("payout", "settlement", "change_order"):
+            continue
+        if action in ("transfer", "grant", "payout", "settlement"):
+            procurement, proc_m = "n/a", None  # not a purchase; procurement rules don't apply
+        vm = _VENDOR_ADDR_RE.search(body) or _VENDOR_ADDR_RE.search(seg)
+        vendor, address = (vm.group("v").strip(" ,"), " ".join(vm.group("a").split())) if vm else (None, None)
+        if not vendor:
+            vm2 = _VENDOR_RE.search(body) or _VENDOR_RE.search(seg)
+            vendor = vm2.group("v").strip(" ,") if vm2 else None
+        if vendor and re.match(r"(?i)^(the\s+)?(city|town|village|borough|county|state|council|board|department)\b", vendor):
+            vendor = None  # "with the City of …" is the counterparty, not a vendor
+        bm = _BIDS_RE.search(seg)
+        bids = None
+        if bm:
+            bids = int(bm.group("n")) if bm.group("n") else _WORDNUM.get(bm.group("w").lower(), None)
+            if bids is None and bm.group("w").isdigit():
+                bids = int(bm.group("w"))
+        am = _ACCOUNT_RE.search(seg)
+        account = (am.group("c") or am.group("c2") or am.group("c3")) if am else None
+        money_m = _MONEY_RE.search(body) if amounts else None
+        quote = _quote(seg, money_m or proc_m or resolved)
+        if action == "transfer":
+            amount = max(amounts) if amounts else None  # from/to legs repeat the same figure
+        else:
+            amount = max(amounts) if amounts else None
+        out.append(AwardFact(
+            item_no=item_no, page=_page_at(text, start), title=title, vendor_name=vendor, vendor_address=address,
+            amount=amount, action_type=action, procurement=procurement, bids_received=bids, account_code=account,
+            meeting_date=fallback_date or find_date(seg[:400]), quote=quote,
+        ))
+    return out
+
+
+_PERSONNEL_ACTIONS = re.compile(
+    r"^(Appointed|Hired|Promoted|Reappointed|Re-appointed|Transferred|Reinstated|Resigned|Retired|Terminated|"
+    r"Separated|Laid Off|Salary (?:Adjustment|Increase)|Title Change|Rehired|Seasonal|Provisional)\b", re.I)
+
+
+def extract_personnel(text: str) -> list[PersonnelFact]:
+    """Column-per-line personnel reports (LAST / FIRST / DEPARTMENT / ACTION / POSITION / SALARY / EFFECTIVE)."""
+    if not re.search(r"\bLAST\b.*\bFIRST\b", text[:600], re.S | re.I) and "personnel" not in text[:2000].lower():
+        return []
+    lines = [l.strip() for l in text.splitlines()]
+    out: list[PersonnelFact] = []
+    for i, line in enumerate(lines):
+        if not _PERSONNEL_ACTIONS.match(line) or i < 3:
+            continue
+        last, first, dept = lines[i - 3], lines[i - 2], lines[i - 1]
+        if not last or not first or len(last) > 40 or any(c.isdigit() for c in last + first):
+            continue
+        rest = " ".join(lines[i + 1:i + 4])
+        sal = re.search(r"\$[\d,]+(?:\.\d{2})?(?:\s*/\s*(?:hr|hour|yr|year|annually))?", rest)
+        eff = re.search(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b", rest)
+        out.append(PersonnelFact(
+            last_name=last.title(), first_name=first.title(), department=dept, action=line,
+            position=lines[i + 1] if i + 1 < len(lines) else "", salary=sal.group(0) if sal else "",
+            effective=eff.group(0) if eff else "", page=_page_at(text, text.find(last)),
+            quote=" / ".join(x for x in (last, first, dept, line, lines[i + 1] if i + 1 < len(lines) else "") if x),
+        ))
+    return out
+
+
+_ROLE_WORDS = r"(?:Council\s+President|Council\s+Vice\s+President|Council\s*(?:Members?|women|men|persons?)|Councilm[ae]n|" \
+              r"Councilwoman|Councilmembers?|Deputy\s+Mayor|Mayor|President|Trustees?|Commissioners?|Members?)"
+
+
+def extract_officials(text: str) -> list[OfficialFact]:
+    """Roll call: 'Present: Council President Finn and Council Members Bendo, Fiumara, Lester, and Reinhart.'"""
+    m = re.search(r"(?is)\bPresent\s*:\s*(.{5,400}?)(?:\n\s*\n|\bAbsent\b|\bAlso\s+Present\b|$)", text[:6000])
+    if not m:
+        return []
+    # Mark role phrases left-to-right (longest alternatives first) so "Council Members" stays one token.
+    marked = re.sub(rf"\b({_ROLE_WORDS})\b", lambda r: f"|{' '.join(r.group(1).split())}|", " ".join(m.group(1).split()))
+    out: list[OfficialFact] = []
+    role = "Member"
+    for i, part in enumerate(marked.split("|")):
+        if i % 2 == 1:
+            role = part
+            continue
+        for n in re.split(r",|\band\b|;", part):
+            n = n.strip(" .")
+            if re.fullmatch(r"[A-Z][a-zA-Z'’\-]+(?:\s+[A-Z][a-zA-Z'’\-]+){0,2}", n or ""):
+                out.append(OfficialFact(name=n, last_name=n.split()[-1].title(), role=role))
+    return out
+
+
+def extract_all(text: str, fallback_date: date | None = None) -> Facts:
+    # Meeting date: the document's own date, else the first date in its header
+    # ("REGULAR MEETING … held OCTOBER 7, 2025"), never a date quoted mid-resolution.
+    fallback_date = fallback_date or find_date(text[:1500])
+    return Facts(
+        awards=extract_awards(text, fallback_date),
+        personnel=extract_personnel(text),
+        officials=extract_officials(text),
+    )
+
+
+def iter_snippets(text: str, patterns: Iterable[str], width: int = 260, limit: int = 3) -> list[tuple[int | None, str]]:
+    """Up to `limit` (page, quote) pairs around the first hits of any pattern."""
+    out = []
+    for p in patterns:
+        for m in re.finditer(p, text, re.I):
+            out.append((_page_at(text, m.start()), " ".join(text[max(0, m.start() - width // 2):m.start() + width // 2].split())))
+            break
+        if len(out) >= limit:
+            break
+    return out
+
+
+# ── NJ bill lists ("Bill List By Vendor Name", Edmunds/GMIS-style exports) ────
+
+@dataclass
+class PaymentFact:
+    vendor_name: str
+    vendor_code: str
+    amount: float
+    po_numbers: list[str]
+    accounts: list[str]
+    descriptions: list[str]
+    page: int | None
+    quote: str
+
+
+_VENDOR_TOTAL_RE = re.compile(r"(?im)^\s*vendor\s+total\s*[:;]?\s*$|vendor\s+total\s*[:;]\s*(?P<inline>[\d,]+\.\d{2})")
+_PO_RE = re.compile(r"\b(\d{2}-\d{5})\b(?:\s+(\d{2}/\d{2}/\d{2,4}))?\s*(.*)")
+_NJ_ACCT_RE = re.compile(r"\b\d-\d{2}-\d{2}-\d{3}-\d{3}-\d{3}\b|\b[A-Z]?-?\d{2}-\d{2}-\d{3}-\d{3}\b")
+_AMOUNT_LINE_RE = re.compile(r"^\s*(-?[\d,]{1,12}\.\d{2})\s*$")
+_CODE_LINE_RE = re.compile(r"^[A-Z0-9'’`~.\-]{5,10}$")
+_HEADER_WORDS = re.compile(r"bill list|vendor #|^name$|^first$|^rcvd|chk/void|stat/chk|^invoice|^1099|^po date|^description|"
+                           r"^po #|^contract|^po type|^amount|^charge account|^acct type|^excl|^item description|"
+                           r"^date$|^last$|^to$|^range|^format:|^vendors:|include non|^void:|^held:|^aprv:|^bid:|^state:|"
+                           r"^other:|^exempt:|p\.o\. type|^page\s*\d+|^\d+/\d+/\d+\s+\d+:\d+|^[A-Z]?\s?[A-Z&]+:\s|^\d{1,2}\s", re.I)
+# Vendor codes are ~5–10 chars ending in a sequence number that OCR mangles (005 → OOS, 0Q5, 00S).
+_GLUED_CODE_RE = re.compile(r"^[A-Za-z0-9'’`~.\-]{3,8}?(?:0{1,2}[0-9OQSs]|O{1,2}[0-9OQSs5]|0Q5)[0-9OQSs5]?(?=[A-Z'’ ])")
+
+
+def _looks_like_name(l: str) -> bool:
+    if re.match(r"(?i)^(item|page|line)\s*\d|^[A-Z]\s+[A-Z&]+[:\s]|^\d", l):  # line-item / budget-code rows
+        return False
+    words = [w for w in re.split(r"[\s']+", l) if sum(c.isalpha() for c in w) >= 2]
+    return (len(words) >= 2 or (len(words) == 1 and len(l) >= 6 and not _CODE_LINE_RE.match(l))) \
+        and not _PO_RE.match(l) and not _NJ_ACCT_RE.search(l) and not re.search(r"\d{2}/\d{2}/\d{2}", l)
+
+
+def _clean_vendor(name: str) -> str:
+    name = re.sub(r"[^\w&.,'\- ]", "", name)  # OCR debris: ~ ` ''
+    return re.sub(r"\s+", " ", name).strip(" .,'-")
+
+
+def extract_bill_list(text: str) -> list[PaymentFact]:
+    """Per-vendor payment totals from a bill list. Tolerates OCR noise; skips
+    vendors whose total can't be read rather than guessing."""
+    if not re.search(r"vendor\s+total", text, re.I):
+        return []
+    lines = text.splitlines()
+    out: list[PaymentFact] = []
+    seg_start = 0
+    i = 0
+    offsets = []
+    pos = 0
+    for line in lines:
+        offsets.append(pos)
+        pos += len(line) + 1
+    while i < len(lines):
+        m = re.match(r"(?i)^\s*vendor\s+total\s*[:;]?\s*([\d,]+\.\d{2})?\s*$", lines[i])
+        if not m:
+            i += 1
+            continue
+        total_s = m.group(1)
+        j = i + 1
+        while not total_s and j < min(i + 4, len(lines)):
+            am = _AMOUNT_LINE_RE.match(lines[j])
+            if am:
+                total_s = am.group(1)
+                break
+            j += 1
+        seg = [l.strip() for l in lines[seg_start:i] if l.strip()]
+        body = [l for l in seg if not _HEADER_WORDS.search(l)]
+        seg_start = max(i + 1, j + 1)
+        i = seg_start
+        if not total_s or not body:
+            continue
+        # Vendor = the line after the vendor-code line (first code-like line in the segment).
+        code, name = "", ""
+        for k, l in enumerate(body[:6]):
+            if _CODE_LINE_RE.match(l) and k + 1 < len(body) and _looks_like_name(body[k + 1]):
+                code, name = l, body[k + 1]
+                break
+        if not name:
+            name = next((l for l in body[:6] if _looks_like_name(l)), "")
+        if not name:
+            name = code or "Unreadable vendor (see page)"
+        glued = _GLUED_CODE_RE.match(name)
+        if glued and len(name) - glued.end() >= 4:
+            code, name = code or glued.group(0), name[glued.end():]
+        name = _clean_vendor(name)
+        if len(name) < 3 or re.fullmatch(r"[\d,.\s/-]+", name):
+            continue
+        pos_, descs = [], []
+        for l in body:
+            pm = _PO_RE.match(l)
+            if pm:
+                pos_.append(pm.group(1))
+                if pm.group(3):
+                    descs.append(pm.group(3).strip()[:120])
+        accounts = sorted(set(_NJ_ACCT_RE.findall(" ".join(body))))
+        out.append(PaymentFact(
+            vendor_name=name, vendor_code=code, amount=parse_money(total_s), po_numbers=pos_, accounts=accounts,
+            descriptions=descs[:5], page=_page_at(text, offsets[min(i, len(offsets) - 1)]),
+            quote=f"{name} — POs {', '.join(pos_[:4]) or 'n/a'} — {'; '.join(descs[:2])} — Vendor Total {total_s}",
+        ))
+    return out

@@ -40,14 +40,17 @@ def _get(key: str, default: str = "") -> str:
 
 # ── Application ──────────────────────────────────────────────────────────────
 
-# Which town this deployment serves: a directory under municipalities/.
-MUNICIPALITY = _get("MUNICIPALITY", "")
-if not MUNICIPALITY:
+# What this deployment serves: a jurisdiction path under jurisdictions/ — a
+# city ("us/ny/nassau/long-beach"), a county ("us/ny/nassau") or a state
+# ("us/ny") — or an alias such as "long-beach-ny". MUNICIPALITY is accepted
+# for older .env files.
+DEPLOYMENT = _get("DEPLOYMENT", "") or _get("MUNICIPALITY", "")
+if not DEPLOYMENT:
     raise RuntimeError(
-        "MUNICIPALITY is unset. Set it to a profile directory under municipalities/ "
-        "(e.g. MUNICIPALITY=long-beach-ny). See docs/ADDING_A_MUNICIPALITY.md."
+        "DEPLOYMENT is unset. Set it to a jurisdiction path or alias "
+        "(e.g. DEPLOYMENT=us/ny/nassau/long-beach). See docs/ADDING_A_MUNICIPALITY.md."
     )
-os.environ["MUNICIPALITY"] = MUNICIPALITY  # municipality.get_municipality() reads env
+os.environ["DEPLOYMENT"] = DEPLOYMENT  # municipality.get_municipality() reads env
 
 from municipality import get_municipality  # noqa: E402
 
@@ -66,7 +69,7 @@ DATABASE_URL = _get(
 AWS_REGION = _get("AWS_REGION", "us-east-1")
 AWS_ACCESS_KEY_ID = _get("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = _get("AWS_SECRET_ACCESS_KEY")
-S3_BUCKET = _get("S3_BUCKET", f"civic-lens-{MUNICIPALITY}")
+S3_BUCKET = _get("S3_BUCKET", "civic-lens-" + get_municipality().slug.replace("/", "-"))
 
 # AI / LLM
 ANTHROPIC_API_KEY = _get("ANTHROPIC_API_KEY")

@@ -5,10 +5,12 @@
 # metadata.source_site keeps mapping to the right entity.
 name: Borough of Atlantic Highlands
 short_name: Atlantic Highlands
+level: municipality
 government_type: borough
-state: NJ
-county: Monmouth
-timezone: America/New_York
+aliases:
+- atlantic-highlands-nj
+include:
+- us/nj/monmouth/highlands
 fiscal_year:
   start_month: 1
   school_start_month: 7
@@ -16,7 +18,6 @@ branding:
   app_name: Atlantic Highlands
   theme_color: '#385854'
   public_origin: https://ahnj.info
-  # Copy branding/dashboard-banner.jpg into web/public/ when deploying AH.
   banner_url: /dashboard-banner.jpg
   banner_alt: Sunset over Raritan Bay from Atlantic Highlands
 entities:
@@ -30,14 +31,6 @@ entities:
   - ahnj
   - ahpd
   - ahvfd
-- key: highlands
-  label: Borough of Highlands
-  short: Highlands
-  kind: municipal
-  description: Borough of Highlands — a DIFFERENT neighboring town (Navesink Ave, "Borough of Highlands", Highlands
-    council)
-  aliases:
-  - highlands borough
 - key: hhrsd
   label: Henry Hudson Regional School District
   short: HHRSD
@@ -51,16 +44,6 @@ entities:
   - ahes
   - hhrs
   - henry hudson
-- key: regional
-  label: Monmouth County
-  short: County
-  kind: county
-  description: Monmouth County or other regional bodies
-- key: state
-  label: State of New Jersey
-  short: NJ
-  kind: state
-  description: State of New Jersey agencies
 ai:
   background: |-
     BOROUGH FACTS:
@@ -123,22 +106,23 @@ search:
     ahes: AHES
 sources:
 - id: ahnj
-  description: "Borough website — Planning Board, Council Archives, Budgets, Ordinances, Annual Audits"
+  description: Borough website — Planning Board, Council Archives, Budgets, Ordinances, Annual Audits
   label: ahnj.com
   adapter: legacy
   entity: atlantic_highlands
   params:
     class: AHNJCrawler
 - id: ecode360
-  description: "Document archive — Agendas, Minutes, Resolutions, Legislation, Budgets"
-  note: "Cloudflare Turnstile protected — requires a browser. Currently skipped on the server (no Chrome installed); results will show 0 found."
+  description: Document archive — Agendas, Minutes, Resolutions, Legislation, Budgets
+  note: Cloudflare Turnstile protected — requires a browser. Currently skipped on the server (no Chrome installed);
+    results will show 0 found.
   label: ecode360.com
   adapter: ecode360
   entity: atlantic_highlands
   params:
     customer: AT0153
 - id: tridistrict
-  description: "HHRSD + AHES + HES + HHRS — BOE Agendas/Minutes, Budget, Curriculum, Performance Reports"
+  description: HHRSD + AHES + HES + HHRS — BOE Agendas/Minutes, Budget, Curriculum, Performance Reports
   label: tridistrict.org
   adapter: legacy
   entity: hhrsd
@@ -149,12 +133,12 @@ sources:
   description: ACFR school finance (0130, 2120, 2160), Sea Bright court opinions, Master Plan, DCA UFB
   label: NJ State / Courts
   adapter: legacy
-  entity: state
+  entity: nj
   params:
     class: NJStateCrawler
 - id: police
   description: SpotCrime, CrimeMapping, Nixle, AHPD page
-  note: "Limited — these are mostly interactive maps, not document repositories."
+  note: Limited — these are mostly interactive maps, not document repositories.
   label: Police/Crime Data
   adapter: legacy
   entity: atlantic_highlands
@@ -162,7 +146,7 @@ sources:
     class: PoliceCrawler
 - id: fire
   description: PulsePoint, Monmouth County OEM, Fire Dept reports
-  note: "Limited — interactive feeds."
+  note: Limited — interactive feeds.
   label: Fire/EMS Data
   adapter: legacy
   entity: atlantic_highlands
@@ -172,7 +156,7 @@ sources:
   description: County clerk archives, property records, tax data
   label: Monmouth County
   adapter: legacy
-  entity: regional
+  entity: nj:monmouth
   params:
     class: CountyCrawler
 - id: census
@@ -182,20 +166,6 @@ sources:
   entity: atlantic_highlands
   params:
     class: CensusCrawler
-- id: highlands_borough
-  description: "Borough of Highlands — regionalization, council letters, public docs"
-  label: highlandsnj.gov
-  adapter: legacy
-  entity: highlands
-  params:
-    class: HighlandsBoroughCrawler
-- id: highlands_meetings
-  description: Highlands Borough Council meeting agendas + packets
-  label: highlands-nj.municodemeetings.com
-  adapter: legacy
-  entity: highlands
-  params:
-    class: HighlandsMeetingsCrawler
 - id: ah_recordings
   description: Atlantic Highlands Council, Planning Board, and Harbor Commission audio recordings (.wma/.wav)
   note: Last 12 months only. Files are uploaded to S3; transcribe + summarize via the Meetings page.
@@ -215,7 +185,7 @@ sources:
     class: HHRSDRecordingsCrawler
 - id: opra
   description: Crowdsourced OPRA public records requests for Atlantic Highlands
-  note: "Cloudflare protected — requires a browser. Currently skipped on the server (no Chrome installed)."
+  note: Cloudflare protected — requires a browser. Currently skipped on the server (no Chrome installed).
   label: OPRAmachine
   adapter: legacy
   entity: atlantic_highlands

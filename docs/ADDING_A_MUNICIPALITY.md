@@ -1,7 +1,7 @@
-# Adding a municipality
+# Adding a town, county or state
 
-A municipality is one YAML file. This guide walks through writing one, using
-`long-beach-ny` as the worked example.
+Each jurisdiction is one YAML file in a tree. This guide walks through adding
+a town, using Long Beach, NY (`us/ny/nassau/long-beach`) as the worked example.
 
 ## 1. Inventory the sources (about an hour)
 
@@ -25,43 +25,74 @@ Open the page source and note how documents are linked: plain `<a href="…pdf">
 links, links grouped under headings (accordions or year sections), or links to
 detail pages.
 
-## 2. Write the profile
+## 2. Write the jurisdiction file
 
-Create `municipalities/<town>-<state>/municipality.yaml`:
+Profiles form a tree: `jurisdictions/us/<state>/<county>/<place>/jurisdiction.yaml`.
+A town inherits its county's and state's rules (records law, bid thresholds,
+accounting notes, crawl policy) and any **source templates** they define.
+Create the county and state files first if they don't exist yet; a county
+file can be as small as its name and level.
 
 ```yaml
+# jurisdictions/us/ny/nassau/long-beach/jurisdiction.yaml
 name: City of Long Beach            # legal name
 short_name: Long Beach              # used in titles, prompts, UI
+level: municipality                 # state | county | municipality
 government_type: city               # city | town | village | borough | township
-state: NY                           # loads municipalities/_states/ny.yaml
-county: Nassau
+aliases: [long-beach-ny]            # optional DEPLOYMENT shortcuts
+include: []                         # neighbours to index too (e.g. us/nj/monmouth/highlands)
 fiscal_year:
-  start_month: 7                    # 1 = calendar year
-  school_start_month: 7
+  start_month: 7                    # 1 = calendar year (inherited from the state if omitted)
 branding:
-  app_name: Long Beach Civic Lens
   theme_color: "#1f4e79"
-  public_origin: https://records.example.org
+template_vars:                      # fills {placeholders} in state/county source_templates
+  osc_search: Long%20Beach
+  osc_slug: long-beach
 
-entities:                           # library groups; FIRST = the primary government
-  - key: long_beach
+entities:                           # governments whose records live here; FIRST = this jurisdiction
+  - key: long_beach                 # omit entities entirely to get one derived from the name
     label: City of Long Beach
     short: City
     kind: municipal                 # municipal | school | county | state | special_district | regional | other
     description: City of Long Beach, NY — City Council, City Manager, ...   # shown to the AI
-    aliases: [long beach, lbpd]     # letterhead names, acronyms
+    aliases: [long beach, lbpd]
+  - key: lbcsd
+    label: Long Beach City School District
+    short: LBCSD
+    kind: school
 
 sources:
-  - id: lbcsd_board                 # stable — stored on every document; don't rename later
-    label: Board of Education agendas, minutes & notices
+  - id: city_council                # stable — stored on every document; don't rename later
+    label: City Council agendas & proceedings
     adapter: html_index
-    entity: lbcsd
-    params: { ... }                 # see adapter reference below
+    entity: long_beach
+    params: { ... }
 ```
 
-Optional sections: `ai` (background facts and analytical notes for the chat
-model), `search` (a glossary of local acronyms, department aliases, and
-`earliest_year`), `events.venues`, and `features` (turn UI sections on or off).
+Optional sections: `ai` (background facts and notes for the chat model),
+`search` (glossary, department aliases), `events.venues`, `features`,
+`crawl`, and `integrity` (rule thresholds; usually set at state level).
+
+**Deploying.** Set `DEPLOYMENT` to the path (or an alias). Root it at
+`us/ny/nassau` to cover the county plus every town beneath it, or at `us/ny`
+for the whole state.
+
+**Source templates** (state or county level) run once per municipality that
+supplies their variables:
+
+```yaml
+source_templates:
+  - id: osc_audits
+    adapter: html_index
+    entity_kind: municipal          # which of the town's entities owns the documents
+    params:
+      start_urls: ["https://www.osc.ny.gov/local-government/audits?combine={osc_search}"]
+      link_pattern: 'osc\.ny\.gov/files/local-government/audits/.+{osc_slug}.*\.pdf'
+```
+
+`{name}`, `{short_name}`, `{slug}`, `{state}` and `{county}` are always
+available. A town missing a variable simply doesn't get the source, and
+`check_profile` reports it.
 
 ## 3. Adapter reference
 
@@ -116,7 +147,7 @@ Add a `SourceAdapter` subclass in `api/services/sources/`, register it in
 
 ```bash
 cd api
-python -m scripts.check_profile long-beach-ny            # schema only
+python -m scripts.check_profile --all                    # every jurisdiction, as a deployment root
 python -m scripts.check_profile long-beach-ny --live     # fetch index pages, no downloads
 ```
 
@@ -133,29 +164,27 @@ doc_type mix looks right. Then do a sampled end-to-end run:
 SCRAPER_MAX_DOCS_PER_SOURCE=10 python -m scripts.scheduled_scrape
 ```
 
-## 5. When robots.txt says no
+## 5. Crawl policy
 
-Ask. Most clerks are glad to help once you explain that you index public
-records, crawl slowly, and identify yourself. Record the answer:
-
-```yaml
-  - id: city_council
-    respect_robots: false
-    permission_note: "City Clerk <name>, email 2026-10-20: OK to index /councilmeetings and /vertical/sites uploads"
-```
-
-The profile won't validate with `respect_robots: false` and no note. Don't spoof
-a search-engine User-Agent to get around a block.
+`crawl.respect_robots` is inherited down the tree (the NJ and NY state files
+set it to `false`) and can be overridden per source with
+`respect_robots: true|false`. `RESPECT_ROBOTS_TXT=false` in the environment
+switches robots checks off everywhere. Whatever the policy, the crawler sends
+its honest User-Agent and stays polite. Record any arrangement with a site
+owner in the source's `permission_note`.
 
 ## 6. New state?
 
-Add `municipalities/_states/<code>.yaml` with:
+Create `jurisdictions/us/<st>/jurisdiction.yaml` with `level: state`, `code`, and:
 
-- the public-records law: name, citation and response deadlines;
-- the oversight agencies (state comptroller, local-finance division,
-  education department);
-- `ai_notes`: accounting-basis differences, tax caps and statutory limits the
-  assistant must respect;
-- a `glossary` of agency acronyms.
+- `records_law`: name, citation and response deadlines;
+- `oversight`: state comptroller, local-finance division, education department;
+- `ai_notes`: accounting basis, tax caps and statutory limits the assistant must respect;
+- `glossary`: agency acronyms;
+- `integrity`: bid thresholds, emergency-procurement statute, change-order
+  cap, pay-to-play rules, each with a `citation`;
+- `source_templates`: state-hosted sources that exist for every town (audits,
+  budgets, campaign finance);
+- `crawl`: the default crawl policy.
 
-See `nj.yaml` and `ny.yaml`.
+See `us/nj` and `us/ny`.

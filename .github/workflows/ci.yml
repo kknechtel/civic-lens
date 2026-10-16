@@ -20,12 +20,9 @@ jobs:
           cache-dependency-path: api/requirements.txt
       - run: pip install -r requirements.txt pytest pyyaml
       - run: pytest tests -q
-      - name: Validate every municipality profile
+      - name: Validate every jurisdiction as a deployment root
         env: {JWT_SECRET: ci-only-placeholder-secret-value-0000000000}
-        run: |
-          for p in ../municipalities/*/municipality.yaml; do
-            python -m scripts.check_profile "$(basename "$(dirname "$p")")"
-          done
+        run: python -m scripts.check_profile --all
 
   web:
     runs-on: ubuntu-latest

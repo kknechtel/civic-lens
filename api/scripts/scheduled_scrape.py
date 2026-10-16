@@ -104,6 +104,18 @@ async def main() -> int:
     except Exception as exc:
         logger.exception("document processing step failed: %s", exc)
 
+    # Step 5 — integrity: extract spending/personnel facts from new docs and
+    # re-run the red-flag rules (reviewer statuses are preserved).
+    try:
+        from database import SessionLocal
+        from municipality import get_municipality
+        if get_municipality().features.integrity:
+            from services.integrity.runner import run_all
+            with SessionLocal() as db:
+                logger.info("Integrity: %s", run_all(db))
+    except Exception as exc:
+        logger.exception("integrity step failed: %s", exc)
+
     return 0
 
 

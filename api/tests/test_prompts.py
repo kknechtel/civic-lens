@@ -13,7 +13,7 @@ class _Doc:
 @pytest.fixture
 def as_profile(monkeypatch):
     def use(slug):
-        monkeypatch.setenv("MUNICIPALITY", slug)
+        monkeypatch.setenv("DEPLOYMENT", slug)
         get_municipality.cache_clear()
         return get_municipality()
     yield use
