@@ -3,12 +3,8 @@
 import React, { useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import { Table } from '@tiptap/extension-table';
-import { TableRow } from '@tiptap/extension-table-row';
-import { TableCell } from '@tiptap/extension-table-cell';
-import { TableHeader } from '@tiptap/extension-table-header';
+import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import Image from '@tiptap/extension-image';
 import { Markdown } from 'tiptap-markdown';
 import {
@@ -93,6 +89,10 @@ function stashCharts(md: string): { stripped: string; charts: string[] } {
   return { stripped, charts };
 }
 function restoreCharts(md: string, charts: string[]): string {
+  // tiptap-markdown escapes every literal bracket on the way out ("\[source:
+  // x.pdf\]"), which breaks both the citation syntax and the chart markers
+  // below. Neither ever wants an escaped bracket, so undo it first.
+  md = md.replace(/\\([[\]])/g, '$1');
   return md.replace(/📊 \[Chart (\d+) — preserved[^\]]*\]/g, (_m, n) => {
     const idx = parseInt(n, 10) - 1;
     return charts[idx] ?? _m;
@@ -127,10 +127,12 @@ function EditorWrapper({
       StarterKit.configure({
         heading: { levels: [2, 3] },
         codeBlock: { HTMLAttributes: { class: 'rounded bg-gray-100 p-2 font-mono text-xs' } },
-      }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: { class: 'underline', style: `color: ${brandColor}` },
+        // v3's StarterKit ships Link (and Underline); configure it here
+        // rather than registering a second Link.
+        link: {
+          openOnClick: false,
+          HTMLAttributes: { class: 'underline', style: `color: ${brandColor}` },
+        },
       }),
       Placeholder.configure({
         placeholder: 'Write the section body in markdown. Use [source: filename.pdf] to cite documents.',
@@ -156,16 +158,16 @@ function EditorWrapper({
   useEffect(() => {
     if (!editor) return;
     const next = stashCharts(section.body || '');
-    const current = (editor.storage.markdown.getMarkdown?.() ?? editor.getText()) as string;
+    const current = (markdownOf(editor) ?? editor.getText()) as string;
     if (current.trim() === next.stripped.trim()) return;
     chartsRef.current = next.charts;
-    editor.commands.setContent(next.stripped, false);
+    editor.commands.setContent(next.stripped, { emitUpdate: false });
     setDirty(false);
   }, [editor, section.id, section.body]);
 
   const handleSave = () => {
     if (!editor) return;
-    const md = (editor.storage.markdown.getMarkdown?.() ?? '') as string;
+    const md = (markdownOf(editor) ?? '') as string;
     // Splice the original chart fences back before persisting.
     const restored = restoreCharts(md, chartsRef.current);
     onSave({ body: restored });
@@ -196,7 +198,7 @@ function EditorWrapper({
             onClick={() => {
               const next = stashCharts(section.body || '');
               chartsRef.current = next.charts;
-              editor.commands.setContent(next.stripped, false);
+              editor.commands.setContent(next.stripped, { emitUpdate: false });
               setDirty(false);
             }}
             className="px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50 text-gray-700"
@@ -212,6 +214,13 @@ function EditorWrapper({
 
 /** Toolbar mirrors the bank-processor's deck editor — same set of buttons,
  *  same ordering: H2 / H3 / B / I / code / lists / quote / link / table / image / HR / undo / redo. */
+// tiptap-markdown keeps its serializer in editor.storage; v3's typed storage
+// doesn't know about it.
+function markdownOf(editor: NonNullable<ReturnType<typeof useEditor>>): string | undefined {
+  const storage = editor.storage as unknown as { markdown?: { getMarkdown?: () => string } };
+  return storage.markdown?.getMarkdown?.();
+}
+
 function Toolbar({ editor, brandColor }: { editor: ReturnType<typeof useEditor>; brandColor: string }) {
   if (!editor) return null;
 
